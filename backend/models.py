@@ -12,6 +12,7 @@ class Course(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     title: str
     video_path: str = Field(index=True, unique=True)
+    file_hash: Optional[str] = Field(default=None, index=True)
     duration: Optional[float] = None
     status: str = Field(default="uploaded", index=True)
     status_message: Optional[str] = None

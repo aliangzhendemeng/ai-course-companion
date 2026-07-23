@@ -23,18 +23,28 @@ class CourseService:
             return Session(engine)
         return self.session
 
-    def create_course(self, title: str, video_path: str | Path, duration: float | None = None) -> Course:
+    def create_course(self, title: str, video_path: str | Path, duration: float | None = None, file_hash: str | None = None) -> Course:
         """创建课程记录。"""
         session = self._get_session()
         course = Course(
             title=title,
             video_path=str(video_path),
             duration=duration,
+            file_hash=file_hash,
             status="uploaded",
         )
         session.add(course)
         session.commit()
         session.refresh(course)
+        if self._owns_session:
+            session.close()
+        return course
+
+    def get_course_by_file_hash(self, file_hash: str) -> Course | None:
+        """根据文件哈希查找课程，用于幂等上传。"""
+        session = self._get_session()
+        statement = select(Course).where(Course.file_hash == file_hash)
+        course = session.exec(statement).first()
         if self._owns_session:
             session.close()
         return course

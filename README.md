@@ -1,93 +1,101 @@
-# ai-course-companion
+# AI 慕课学伴
 
+基于 SpecKit 方法构建的 AI 慕课学习助手，支持视频上传、字幕提取、关键帧 OCR/VLM 解析、RAG 知识问答和学习进度跟踪。
 
+## 环境要求
 
-## Getting started
+- Python 3.11+
+- macOS / Linux / Windows
+- 建议预留 5GB+ 磁盘空间（用于视频、帧图、向量数据库）
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## 快速启动
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+### 1. 创建并激活虚拟环境
 
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.gz.cvte.cn/i_conglin/ai-course-companion.git
-git branch -M main
-git push -uf origin main
+```bash
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+pip install -r requirements.txt
 ```
 
-## Integrate with your tools
+### 2. 配置环境变量
 
-* [Set up project integrations](https://gitlab.gz.cvte.cn/i_conglin/ai-course-companion/-/settings/integrations)
+```bash
+cp .env.example .env
+# 编辑 .env，填入你的 DEEPSEEK_API_KEY
+```
 
-## Collaborate with your team
+### 3. 启动后端
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+```bash
+./start_backend.sh
+```
 
-## Test and Deploy
+后端服务将运行在 http://127.0.0.1:8000
 
-Use the built-in continuous integration in GitLab.
+### 4. 启动前端
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+新起一个终端，执行：
 
-***
+```bash
+./start_frontend.sh
+```
 
-# Editing this README
+前端将运行在 http://localhost:8501
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+> 两个启动脚本会自动切换到项目根目录、激活虚拟环境，并从正确路径读取 `.streamlit/config.toml` 中的 2GB 上传限制。
 
-## Suggestions for a good README
+## 项目结构
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+```
+ai-course-companion/
+├── backend/              # FastAPI 后端
+│   ├── api/              # REST API 路由
+│   ├── ai/               # AI / RAG / VLM 处理
+│   ├── core/             # 视频、音频、OCR 等核心处理
+│   ├── services/         # 业务逻辑
+│   ├── config.py         # 配置管理
+│   ├── database.py       # 数据库连接
+│   └── main.py           # FastAPI 入口
+├── frontend/             # Streamlit 前端
+│   ├── Home.py
+│   └── pages/
+├── data/                 # 上传视频、帧图、数据库、向量库
+├── specs/                # SpecKit 规格说明
+├── tests/                # 测试
+├── requirements.txt
+├── run.py                # 后端启动脚本（Python）
+├── run_frontend.py       # 前端启动脚本（Python）
+├── start_backend.sh      # 后端一键启动脚本（Bash）
+└── start_frontend.sh     # 前端一键启动脚本（Bash）
+```
 
-## Name
-Choose a self-explaining name for your project.
+## 视频上传说明
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+- 支持格式：mp4、mkv、mov、avi
+- 最大支持 2GB，适合 45 分钟左右的慕课视频
+- 上传后会在后台异步完成字幕提取、关键帧分析和总结生成
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+## 常见问题
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+**Q: 启动后端时报 `ModuleNotFoundError: No module named 'backend'`？**
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+A: 请使用项目提供的 `run.py` 启动，它会自动将项目根目录加入 Python 模块搜索路径。
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+**Q: 启动后端时报 `sqlite3.OperationalError: unable to open database file`？**
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+A: 数据库路径已改为基于项目根目录的绝对路径。如果仍有问题，请检查 `data/` 目录是否存在且可写。
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+**Q: 上传大视频时提示超过 200MB 限制？**
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+A: 请使用 `python run_frontend.py` 启动前端，确保读取到项目根目录 `.streamlit/config.toml` 中的 2GB 上传限制。直接运行 `streamlit run frontend/Home.py` 时，若当前目录不是项目根目录，会忽略该配置。
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## 开发命令
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```bash
+# 运行测试
+pytest
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+# 代码检查（可选）
+# ruff check .
+```

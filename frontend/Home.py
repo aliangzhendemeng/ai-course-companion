@@ -13,3 +13,7 @@ st.markdown("""
 - **课程学习**：查看总结和播放视频
 - **知识问答**：基于课程内容提问
 """)
+
+# 调试用：显示当前上传大小限制
+with st.sidebar:
+    st.caption(f"最大上传限制: {st.get_option('server.maxUploadSize')} MB")

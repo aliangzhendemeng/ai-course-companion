@@ -1,8 +1,9 @@
 """RAG 引擎：基于课程内容的检索与问答。"""
 
-from langchain_core.documents import Document
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
+from langchain_community.vectorstores.utils import filter_complex_metadata
+from langchain_core.documents import Document
 
 from backend.ai.factory import create_llm
 from backend.ai.llm.base import BaseLLM
@@ -27,6 +28,11 @@ class RAGEngine:
     def _get_persist_directory(self) -> str:
         return str(settings.resolve_path(settings.chroma_dir))
 
+    def _clean_metadata(self, metadata: dict) -> dict:
+        """过滤 Chroma 不支持的 None / 复杂类型 metadata。"""
+        allowed_types = (str, int, float, bool)
+        return {k: v for k, v in metadata.items() if isinstance(v, allowed_types)}
+
     def index_course(
         self,
         course_id: int,
@@ -43,12 +49,12 @@ class RAGEngine:
             transcript_id = transcript.id if hasattr(transcript, "id") else transcript.get("id")
             documents.append(Document(
                 page_content=text,
-                metadata={
+                metadata=self._clean_metadata({
                     "course_id": course_id,
                     "source_type": "transcript",
                     "timestamp": start_time,
                     "transcript_id": transcript_id,
-                },
+                }),
             ))
 
         # 帧 OCR 文字
@@ -61,28 +67,30 @@ class RAGEngine:
             if ocr_text:
                 documents.append(Document(
                     page_content=ocr_text,
-                    metadata={
+                    metadata=self._clean_metadata({
                         "course_id": course_id,
                         "source_type": "ocr_text",
                         "timestamp": timestamp,
                         "frame_id": frame_id,
-                    },
+                    }),
                 ))
 
             # 帧视觉描述
             if vision_desc:
                 documents.append(Document(
                     page_content=vision_desc,
-                    metadata={
+                    metadata=self._clean_metadata({
                         "course_id": course_id,
                         "source_type": "vision_desc",
                         "timestamp": timestamp,
                         "frame_id": frame_id,
-                    },
+                    }),
                 ))
 
         if not documents:
             return
+
+        documents = filter_complex_metadata(documents)
 
         Chroma.from_documents(
             documents=documents,

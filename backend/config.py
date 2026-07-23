@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     """应用配置，从 .env 文件加载。"""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=str(Path(__file__).parent.parent / ".env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )

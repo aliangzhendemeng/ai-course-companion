@@ -45,18 +45,66 @@ class VideoProcessor:
         vision_analyzer: BaseVisionAnalyzer | None = None,
         summarizer: Summarizer | None = None,
     ) -> None:
-        self.audio_extractor = audio_extractor or AudioExtractor()
-        self.asr_engine = asr_engine or ASREngine()
-        self.frame_extractor = frame_extractor or FrameExtractor(
-            max_frames=settings.max_frames_per_course,
-            frame_interval=settings.frame_interval,
-        )
-        self.ocr_engine = ocr_engine or OCREngine()
-        self.vision_analyzer = vision_analyzer or create_vision_analyzer()
-        self.summarizer = summarizer or Summarizer()
-        self.rag_engine = RAGEngine()
+        # 延迟初始化重型组件，避免在后台任务线程外或请求线程中初始化
+        self._audio_extractor = audio_extractor
+        self._asr_engine = asr_engine
+        self._frame_extractor = frame_extractor
+        self._ocr_engine = ocr_engine
+        self._vision_analyzer = vision_analyzer
+        self._summarizer = summarizer
+        self.rag_engine = None
         self.course_service = CourseService()
         self.summary_service = SummaryService()
+
+    @property
+    def audio_extractor(self) -> AudioExtractor:
+        if self._audio_extractor is None:
+            self._audio_extractor = AudioExtractor()
+        return self._audio_extractor
+
+    @property
+    def asr_engine(self) -> ASREngine:
+        if self._asr_engine is None:
+            self._asr_engine = ASREngine()
+        return self._asr_engine
+
+    @property
+    def frame_extractor(self) -> FrameExtractor:
+        if self._frame_extractor is None:
+            self._frame_extractor = FrameExtractor(
+                max_frames=settings.max_frames_per_course,
+                frame_interval=settings.frame_interval,
+            )
+        return self._frame_extractor
+
+    @property
+    def ocr_engine(self) -> OCREngine:
+        if self._ocr_engine is None:
+            logger.info("初始化 OCR 引擎...")
+            self._ocr_engine = OCREngine()
+            logger.info("OCR 引擎初始化完成")
+        return self._ocr_engine
+
+    @property
+    def vision_analyzer(self) -> BaseVisionAnalyzer:
+        if self._vision_analyzer is None:
+            logger.info("初始化视觉分析器...")
+            self._vision_analyzer = create_vision_analyzer()
+            logger.info("视觉分析器初始化完成")
+        return self._vision_analyzer
+
+    @property
+    def summarizer(self) -> Summarizer:
+        if self._summarizer is None:
+            self._summarizer = Summarizer()
+        return self._summarizer
+
+    def _get_rag_engine(self) -> RAGEngine:
+        if self.rag_engine is None:
+            logger.info("初始化 RAG 引擎...")
+            self.rag_engine = RAGEngine()
+            logger.info("RAG 引擎初始化完成")
+        return self.rag_engine
 
     def process(self, course_id: int) -> None:
         """处理单个课程。"""
@@ -118,7 +166,7 @@ class VideoProcessor:
             # 6. 构建 RAG 索引
             self._update_status(course, "indexing_rag")
             frame_models = self._get_frames(course_id)
-            self.rag_engine.index_course(course_id, transcripts, frame_models)
+            self._get_rag_engine().index_course(course_id, transcripts, frame_models)
 
             # 7. 完成
             self._update_status(course, "completed", "处理完成")

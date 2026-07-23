@@ -1,5 +1,6 @@
 """课程相关 API。"""
 
+import hashlib
 import shutil
 from pathlib import Path
 
@@ -11,6 +12,21 @@ from backend.schemas import CourseCreateResponse, CourseDetail, CourseListItem
 from backend.services.course_service import CourseService
 
 router = APIRouter()
+
+
+def _process_course(course_id: int) -> None:
+    """在后台任务中初始化处理器并处理课程，避免上传请求被阻塞。"""
+    VideoProcessor().process(course_id)
+
+
+def _compute_file_hash(file: UploadFile) -> str:
+    """计算上传文件 SHA256 哈希，用于幂等性判断。"""
+    hasher = hashlib.sha256()
+    file.file.seek(0)
+    for chunk in iter(lambda: file.file.read(8192), b""):
+        hasher.update(chunk)
+    file.file.seek(0)
+    return hasher.hexdigest()
 
 
 @router.get("", response_model=list[CourseListItem])
@@ -29,8 +45,19 @@ def upload_course(
     """上传视频并创建课程。"""
     service = CourseService()
 
+    # 计算文件哈希，避免重复上传同一文件创建多个课程
+    file_hash = _compute_file_hash(file)
+    existing = service.get_course_by_file_hash(file_hash)
+    if existing and existing.status != "failed":
+        return CourseCreateResponse(
+            id=existing.id,
+            title=existing.title,
+            status=existing.status,
+            created_at=existing.created_at,
+        )
+
     # 创建课程记录
-    course = service.create_course(title=title, video_path="")
+    course = service.create_course(title=title, video_path="", file_hash=file_hash)
 
     # 保存上传文件
     upload_dir = settings.resolve_path(settings.upload_dir) / str(course.id)
@@ -45,8 +72,8 @@ def upload_course(
     course.video_path = str(video_path)
     service.update_course(course)
 
-    # 后台处理
-    background_tasks.add_task(VideoProcessor().process, course.id)
+    # 后台处理：延迟初始化 VideoProcessor，避免阻塞上传响应
+    background_tasks.add_task(_process_course, course.id)
 
     return CourseCreateResponse(
         id=course.id,
