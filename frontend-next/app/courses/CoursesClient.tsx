@@ -15,7 +15,10 @@ interface CoursesClientProps {
 }
 
 export function CoursesClient({ initialCourses }: CoursesClientProps) {
-  const { data: courses, isLoading } = useCourses({ initialData: initialCourses })
+  const { data: courses, isLoading } = useCourses({
+    initialData: initialCourses,
+    staleTime: 5000,
+  })
   const uploadMutation = useUploadCourse()
   const deleteMutation = useDeleteCourse()
   const reprocessMutation = useReprocessCourse()

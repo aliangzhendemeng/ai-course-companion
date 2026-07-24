@@ -28,6 +28,7 @@ export function useCourses(options?: Partial<UseQueryOptions<Course[], Error>>) 
     queryKey: ["courses"],
     queryFn: listCourses,
     refetchInterval: 5000,
+    staleTime: 5000,
     ...options,
   })
 }
