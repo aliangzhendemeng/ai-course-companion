@@ -18,23 +18,54 @@ interface CourseCardProps {
   onReprocess?: (id: number) => void
 }
 
+const PROCESSING_STATUSES = [
+  "extracting_audio",
+  "transcribing",
+  "extracting_frames",
+  "ocr_and_vision",
+  "generating_summary",
+  "indexing_rag",
+]
+
+function isProcessing(status: string) {
+  return PROCESSING_STATUSES.includes(status)
+}
+
 function statusBadge(status: string) {
-  switch (status) {
-    case "completed":
-      return { variant: "default" as const, icon: CheckCircle2, label: "已完成" }
-    case "failed":
-      return { variant: "destructive" as const, icon: AlertCircle, label: "失败" }
-    case "processing":
-      return { variant: "secondary" as const, icon: Loader2, label: "处理中" }
-    default:
-      return { variant: "accent" as const, icon: Clock, label: "待处理" }
+  if (status === "completed") {
+    return { variant: "default" as const, icon: CheckCircle2, label: "已完成" }
   }
+  if (status === "failed") {
+    return { variant: "destructive" as const, icon: AlertCircle, label: "处理失败" }
+  }
+  if (isProcessing(status)) {
+    return { variant: "secondary" as const, icon: Loader2, label: "处理中" }
+  }
+  // uploaded / queued / unknown
+  return { variant: "outline" as const, icon: Clock, label: "排队中" }
+}
+
+function statusMessage(status: string, message: string | null) {
+  if (status === "failed") return message || "处理失败，可点击重新处理"
+  if (isProcessing(status)) {
+    const labels: Record<string, string> = {
+      extracting_audio: "正在提取音频",
+      transcribing: "正在语音识别",
+      extracting_frames: "正在抽取关键帧",
+      ocr_and_vision: "正在识别课件内容",
+      generating_summary: "正在生成课程总结",
+      indexing_rag: "正在构建知识索引",
+    }
+    return message || labels[status] || "正在处理"
+  }
+  if (status === "completed") return message || "处理完成"
+  return message || "等待处理"
 }
 
 export function CourseCard({ course, onDelete, onReprocess }: CourseCardProps) {
+  const processing = isProcessing(course.status)
   const { variant, icon: Icon, label } = statusBadge(course.status)
   const isCompleted = course.status === "completed"
-  const isProcessing = course.status === "processing"
 
   return (
     <Card className="group flex flex-col overflow-hidden transition-all duration-200 hover:shadow-md hover:-translate-y-0.5">
@@ -42,7 +73,7 @@ export function CourseCard({ course, onDelete, onReprocess }: CourseCardProps) {
         <div className="flex items-start justify-between gap-3">
           <h3 className="line-clamp-2 text-lg font-semibold leading-snug text-foreground">{course.title}</h3>
           <Badge variant={variant} className="shrink-0 gap-1 px-2 py-0.5 text-xs">
-            <Icon className={`h-3 w-3 ${isProcessing ? "animate-spin" : ""}`} />
+            <Icon className={`h-3 w-3 ${processing ? "animate-spin" : ""}`} />
             {label}
           </Badge>
         </div>
@@ -52,9 +83,9 @@ export function CourseCard({ course, onDelete, onReprocess }: CourseCardProps) {
           <Clock className="h-3.5 w-3.5" />
           <span>{course.duration != null ? formatDuration(course.duration) : "时长未知"}</span>
         </div>
-        {course.status_message ? (
-          <p className="mt-3 line-clamp-2 text-xs text-muted-foreground">{course.status_message}</p>
-        ) : null}
+        <p className="mt-3 line-clamp-2 text-xs text-muted-foreground">
+          {statusMessage(course.status, course.status_message)}
+        </p>
       </CardContent>
       <CardFooter className="flex gap-2 pt-0">
         {isCompleted ? (
@@ -68,12 +99,12 @@ export function CourseCard({ course, onDelete, onReprocess }: CourseCardProps) {
           <Button
             className="flex-1 gap-1.5"
             size="sm"
-            variant="secondary"
-            disabled={isProcessing}
+            variant={course.status === "failed" ? "default" : "secondary"}
+            disabled={processing}
             onClick={() => onReprocess?.(course.id)}
           >
             <RefreshCw className="h-4 w-4" />
-            重新处理
+            {course.status === "failed" ? "重新处理" : processing ? "处理中" : "开始处理"}
           </Button>
         )}
 
