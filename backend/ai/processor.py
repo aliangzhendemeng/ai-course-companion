@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 from backend.ai.factory import create_vision_analyzer
+from backend.ai.frame_enricher import FrameEnricher
 from backend.ai.rag_engine import RAGEngine
 from backend.ai.summarizer import Summarizer
 from backend.ai.vision.base import BaseVisionAnalyzer
@@ -74,6 +75,9 @@ class VideoProcessor:
             self._frame_extractor = FrameExtractor(
                 max_frames=settings.max_frames_per_course,
                 frame_interval=settings.frame_interval,
+                mode=settings.frame_extraction_mode,
+                scene_change_threshold=settings.scene_change_threshold,
+                min_scene_interval=settings.min_scene_interval,
             )
         return self._frame_extractor
 
@@ -198,36 +202,35 @@ class VideoProcessor:
             session.commit()
 
     def _enrich_frames(self, course_id: int, frames: list[dict]) -> list[dict]:
+        """使用 FrameEnricher 对帧进行 OCR 和智能视觉理解，并持久化。"""
         from backend.database import engine
         from backend.models import Frame
         from sqlmodel import Session
 
-        enriched = []
+        enricher = FrameEnricher(
+            ocr_engine=self.ocr_engine,
+            vision_analyzer=self._vision_analyzer,
+            max_workers=settings.vision_max_workers,
+        )
+        enriched = enricher.enrich(course_id=course_id, frames=frames)
+
+        # 建立 timestamp -> frame_info 的映射，用于回填 image_path
+        frame_info_by_timestamp = {f["timestamp"]: f for f in frames}
+
         with Session(engine) as session:
-            for frame_info in frames:
-                frame_path = frame_info["path"]
-                timestamp = frame_info["timestamp"]
-
-                ocr_text = self.ocr_engine.extract_text_string(frame_path)
-                vision_desc = self.vision_analyzer.understand_frame(frame_path)
-
+            for item in enriched:
+                frame_info = frame_info_by_timestamp.get(item["timestamp"], {})
                 frame = Frame(
                     course_id=course_id,
-                    timestamp=timestamp,
-                    image_path=frame_path,
-                    ocr_text=ocr_text,
-                    vision_desc=vision_desc,
+                    timestamp=item["timestamp"],
+                    image_path=frame_info.get("path", ""),
+                    ocr_text=item["ocr_text"],
+                    vision_desc=item["vision_desc"],
                 )
                 session.add(frame)
-                session.commit()
+            session.commit()
+            for frame in enriched:
                 session.refresh(frame)
-
-                enriched.append({
-                    "id": frame.id,
-                    "timestamp": timestamp,
-                    "ocr_text": ocr_text,
-                    "vision_desc": vision_desc,
-                })
         return enriched
 
     def _get_frames(self, course_id: int) -> list[Frame]:
