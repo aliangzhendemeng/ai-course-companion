@@ -26,14 +26,20 @@ class CourseService:
     def create_course(self, title: str, video_path: str | Path, duration: float | None = None, file_hash: str | None = None) -> Course:
         """创建课程记录。"""
         session = self._get_session()
+        safe_video_path = str(video_path) if video_path else "__pending__"
         course = Course(
             title=title,
-            video_path=str(video_path),
+            video_path=safe_video_path,
             duration=duration,
             file_hash=file_hash,
             status="uploaded",
         )
         session.add(course)
+        session.flush()
+        # 如果创建时 video_path 为占位，使用 id 保证唯一性
+        if course.video_path == "__pending__":
+            course.video_path = f"__pending__{course.id}__"
+            session.add(course)
         session.commit()
         session.refresh(course)
         if self._owns_session:

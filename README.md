@@ -35,13 +35,23 @@ cp .env.example .env
 
 ### 4. 启动前端
 
-新起一个终端，执行：
+项目提供两个前端，可任选其一：
+
+#### Streamlit 前端（原有）
 
 ```bash
 ./start_frontend.sh
 ```
 
-前端将运行在 http://localhost:8501
+访问 http://localhost:8501
+
+#### Next.js 现代前端（新增）
+
+```bash
+./start_frontend_next.sh
+```
+
+访问 http://localhost:3000
 
 > 两个启动脚本会自动切换到项目根目录、激活虚拟环境，并从正确路径读取 `.streamlit/config.toml` 中的 2GB 上传限制。
 
@@ -60,6 +70,11 @@ ai-course-companion/
 ├── frontend/             # Streamlit 前端
 │   ├── Home.py
 │   └── pages/
+├── frontend-next/        # Next.js 现代前端
+│   ├── app/              # App Router
+│   ├── components/       # React 组件
+│   ├── hooks/            # TanStack Query hooks
+│   └── lib/              # API 客户端与工具
 ├── data/                 # 上传视频、帧图、数据库、向量库
 ├── specs/                # SpecKit 规格说明
 ├── tests/                # 测试

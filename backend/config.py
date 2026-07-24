@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     upload_dir: str = "./data/uploads"
     frame_dir: str = "./data/frames"
     chroma_dir: str = "./data/chroma"
+    bm25_dir: str = "./data/bm25"
     database_url: str = "sqlite:///./data/app.db"
 
     # 日志

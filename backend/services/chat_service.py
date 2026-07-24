@@ -17,7 +17,7 @@ class ChatService:
         self.rag_engine = rag_engine or RAGEngine()
         self.course_service = CourseService()
 
-    def ask(self, course_id: int, question: str) -> dict:
+    def ask(self, course_id: int, question: str, scope: str = "course") -> dict:
         """提问并返回答案。"""
         course = self.course_service.get_course(course_id)
         if not course:
@@ -25,7 +25,10 @@ class ChatService:
         if course.status != "completed":
             raise ValueError("课程尚未处理完成，无法问答")
 
-        result = self.rag_engine.query(course_id, question)
+        if scope == "all":
+            result = self.rag_engine.query_all(question)
+        else:
+            result = self.rag_engine.query(course_id, question)
 
         # 保存用户问题
         with Session(engine) as session:
