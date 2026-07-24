@@ -218,6 +218,7 @@ class VideoProcessor:
         frame_info_by_timestamp = {f["timestamp"]: f for f in frames}
 
         with Session(engine) as session:
+            orm_frames = []
             for item in enriched:
                 frame_info = frame_info_by_timestamp.get(item["timestamp"], {})
                 frame = Frame(
@@ -228,8 +229,9 @@ class VideoProcessor:
                     vision_desc=item["vision_desc"],
                 )
                 session.add(frame)
+                orm_frames.append(frame)
             session.commit()
-            for frame in enriched:
+            for frame in orm_frames:
                 session.refresh(frame)
         return enriched
 

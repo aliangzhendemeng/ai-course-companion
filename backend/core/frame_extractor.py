@@ -119,8 +119,10 @@ class FrameExtractor:
         last_keyframe_hist = None
         frame_count = 0
 
-        # 用于兜底均匀采样的计时器
-        last_fallback_time = -self.frame_interval
+        # 兜底间隔：当场景变化检测失灵时，按此间隔强制抽帧，
+        # 取 frame_interval 与 duration/max_frames 的较大值，避免产生过多帧
+        fallback_interval = max(self.frame_interval, duration / self.max_frames) if duration > 0 else self.frame_interval
+        last_fallback_time = -fallback_interval
 
         while True:
             ret, frame = cap.read()
@@ -142,8 +144,8 @@ class FrameExtractor:
                 if similarity < self.scene_change_threshold and time_since_last >= self.min_scene_interval:
                     scene_changed = True
 
-            # 兜底：按 frame_interval 强制抽帧
-            fallback_due = (current_time - last_fallback_time) >= self.frame_interval
+            # 兜底：按稀疏间隔强制抽帧
+            fallback_due = (current_time - last_fallback_time) >= fallback_interval
 
             if scene_changed or fallback_due or last_keyframe_hist is None:
                 frames.append(self._save_frame(frame, current_time, output_dir))
