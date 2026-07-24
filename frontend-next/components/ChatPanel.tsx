@@ -117,6 +117,7 @@ function MessageBubble({
   onSeek?: (timestamp: number, courseId?: number) => void
 }) {
   const isUser = message.role === "user"
+  const sources = normalizeSources(message.sources)
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
@@ -127,11 +128,11 @@ function MessageBubble({
         }`}
       >
         <p className="whitespace-pre-wrap">{message.content}</p>
-        {!isUser && message.sources && message.sources.length > 0 ? (
+        {!isUser && sources.length > 0 ? (
           <div className="mt-3 space-y-2">
             <p className="text-xs font-medium text-muted-foreground">参考来源</p>
             <div className="flex flex-wrap gap-2">
-              {message.sources.map((source, idx) => (
+              {sources.map((source, idx) => (
                 <SourceChip key={idx} source={source} onSeek={onSeek} />
               ))}
             </div>
@@ -140,6 +141,20 @@ function MessageBubble({
       </div>
     </div>
   )
+}
+
+function normalizeSources(sources: ChatMessage["sources"]): Source[] {
+  if (!sources) return []
+  if (Array.isArray(sources)) return sources
+  if (typeof sources === "string") {
+    try {
+      const parsed = JSON.parse(sources)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  return []
 }
 
 function SourceChip({ source, onSeek }: { source: Source; onSeek?: (timestamp: number, courseId?: number) => void }) {

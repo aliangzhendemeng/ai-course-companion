@@ -9,12 +9,15 @@ from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_community.vectorstores.utils import filter_complex_metadata
 from langchain_core.documents import Document
+from sqlmodel import Session, select
 
 from backend.ai.factory import create_chat_llm
 from backend.ai.llm.base import BaseLLM
 from backend.ai.rank_utils import rrf_fuse
 from backend.ai.text_utils import tokenize_for_bm25
 from backend.config import settings
+from backend.database import engine
+from backend.models import Frame, Transcript
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +26,8 @@ class RAGEngine:
     """课程 RAG 引擎，支持向量检索、BM25 稀疏检索、全局跨课程搜索。"""
 
     GLOBAL_COLLECTION = "global_courses"
+    # 单课程完整文本上限，超过后自动切换到片段 RAG
+    FULL_TEXT_MAX_CHARS = 200000
 
     def __init__(
         self,
@@ -92,10 +97,12 @@ class RAGEngine:
             frame_id = frame.id if hasattr(frame, "id") else frame.get("id")
 
             if ocr_text:
+                # 对 OCR 文本按行合并，避免标题和正文被拆成多个短文档
+                merged_ocr = self._merge_ocr_text(ocr_text)
                 doc_id = self._build_doc_id(course_id, "ocr_text", frame_id, frame_index)
                 doc_ids.append(doc_id)
                 documents.append(Document(
-                    page_content=ocr_text,
+                    page_content=merged_ocr,
                     metadata=self._clean_metadata({
                         "course_id": course_id,
                         "source_type": "ocr_text",
@@ -122,6 +129,23 @@ class RAGEngine:
                 frame_index += 1
 
         return documents, doc_ids
+
+    def _merge_ocr_text(self, ocr_text: str) -> str:
+        """合并 OCR 文本中的短行，保留段落结构。"""
+        lines = [line.strip() for line in ocr_text.split("\n") if line.strip()]
+        if not lines:
+            return ""
+        merged = []
+        current = lines[0]
+        for line in lines[1:]:
+            # 如果当前行较短（标题/列表项）或下一行是列表项，则换行
+            if len(current) < 20 or line.startswith("·") or line.startswith("-") or line[0].isdigit():
+                merged.append(current)
+                current = line
+            else:
+                current += line
+        merged.append(current)
+        return "\n".join(merged)
 
     def _get_bm25_path(self, name: str) -> Path:
         """获取 BM25 索引路径。"""
@@ -298,13 +322,18 @@ class RAGEngine:
                 except Exception:
                     pass
 
-        # RRF 融合
-        vector_ranked = [{"id": doc.metadata.get("doc_id", doc.page_content), **doc.metadata, "text": doc.page_content}
-                         for doc in vector_docs]
-        bm25_ranked = [{"id": doc_id, **doc_by_id[doc_id].metadata, "text": doc_by_id[doc_id].page_content}
-                       for doc_id, _ in bm25_results if doc_id in doc_by_id]
+        # RRF 融合，保留更多候选，再做多样性重排序
+        vector_ranked = [
+            {"id": doc.metadata.get("doc_id", doc.page_content), **doc.metadata, "text": doc.page_content}
+            for doc in vector_docs
+        ]
+        bm25_ranked = [
+            {"id": doc_id, **doc_by_id[doc_id].metadata, "text": doc_by_id[doc_id].page_content}
+            for doc_id, _ in bm25_results if doc_id in doc_by_id
+        ]
 
-        fused = rrf_fuse([vector_ranked, bm25_ranked], k=self.rrf_k, top_n=self.top_k, key="id")
+        fused = rrf_fuse([vector_ranked, bm25_ranked], k=self.rrf_k, top_n=self.top_k * 2, key="id")
+        fused = self._diversity_rerank(fused, top_n=self.top_k)
 
         # 转回 Document
         result_docs = []
@@ -315,26 +344,144 @@ class RAGEngine:
 
         return result_docs
 
+    def _diversity_rerank(self, items: list[dict], top_n: int) -> list[dict]:
+        """多样性重排序：避免同一页面/幻灯片的重复内容挤占结果。"""
+        selected = []
+        for item in items:
+            text = item.get("text", "")
+            if len(selected) >= top_n:
+                break
+            # 跳过与已选文档高度重复的内容（同一幻灯片被多次采样）
+            if any(self._overlap_ratio(text, s.get("text", "")) > 0.7 for s in selected):
+                continue
+            selected.append(item)
+        for item in items:
+            if item not in selected:
+                selected.append(item)
+        return selected[:top_n]
+
+    def _overlap_ratio(self, a: str, b: str) -> float:
+        """计算两个字符串的 token 重叠率。"""
+        set_a = set(a)
+        set_b = set(b)
+        if not set_a or not set_b:
+            return 0.0
+        return len(set_a & set_b) / min(len(set_a), len(set_b))
+
     def query(self, course_id: int, question: str) -> dict:
-        """基于课程内容回答问题（单课程）。"""
+        """基于课程内容回答问题（单课程）。
+
+        优先使用完整清洗文本；如果文本过长，则回退到 RAG 片段。
+        """
+        full_text = self._load_course_full_text(course_id)
+        if full_text and len(full_text) <= self.FULL_TEXT_MAX_CHARS:
+            return self._query_with_full_text(question, full_text, course_id)
+
+        # 回退：课程无内容或过长，使用 RAG 片段
         collection_name = self._get_collection_name(course_id)
         docs = self._retrieve(collection_name, collection_name, question)
+        return self._answer_with_docs(question, docs, multi_course=False)
 
+    def _load_course_full_text(self, course_id: int) -> str:
+        """从数据库加载一门课的完整清洗文本（字幕 + OCR）。"""
+        with Session(engine) as session:
+            transcripts = session.exec(
+                select(Transcript).where(Transcript.course_id == course_id).order_by(Transcript.start_time)
+            ).all()
+            frames = session.exec(
+                select(Frame).where(Frame.course_id == course_id).order_by(Frame.timestamp)
+            ).all()
+
+        parts = []
+        for t in transcripts:
+            if t.text:
+                parts.append(f"[字幕 {format_timestamp(t.start_time)}] {t.text}")
+        for f in frames:
+            if f.ocr_text:
+                merged = self._merge_ocr_text(f.ocr_text)
+                if merged:
+                    parts.append(f"[课件 {format_timestamp(f.timestamp)}] {merged}")
+
+        return "\n\n".join(parts)
+
+    def _query_with_full_text(self, question: str, full_text: str, course_id: int) -> dict:
+        """使用完整课程文本直接回答。"""
+        system_prompt = (
+            "你是一位严谨的课程助教。请严格根据下面提供的完整课程内容回答用户问题。"
+            "如果内容中没有包含问题的答案，请明确告诉用户'根据现有课程内容，无法找到答案'，不要编造。"
+        )
+        user_prompt = f"""
+        以下是完整课程内容：
+
+        {full_text}
+
+        用户问题：{question}
+
+        要求：
+        1. 仅基于以上课程内容回答。
+        2. 如果内容中没有答案，明确说明无法找到。
+        3. 回答尽量准确、完整。
+        """
+
+        answer = self.llm.chat(system_prompt, user_prompt, max_tokens=1500)
+
+        # sources 保留一个整课来源，前端可跳转
+        return {
+            "answer": answer,
+            "sources": [
+                {
+                    "type": "course_full_text",
+                    "timestamp": 0,
+                    "text": full_text[:200],
+                    "course_id": course_id,
+                    "course_title": None,
+                }
+            ],
+        }
+
+    def _answer_with_docs(self, question: str, docs: list[Document], multi_course: bool) -> dict:
+        """使用 RAG 检索到的片段回答。"""
         context_parts = []
         for i, doc in enumerate(docs, 1):
             context_parts.append(f"[{i}] {doc.page_content}")
         context = "\n\n".join(context_parts)
 
-        system_prompt = "你是一位课程助教，只根据提供的课程内容回答问题。如果内容中没有答案，请明确告知用户。"
-        user_prompt = f"""
-        以下是课程内容片段：
+        if multi_course:
+            system_prompt = (
+                "你是一位严谨的课程助教。请严格根据下面提供的多门课程内容片段回答用户问题。"
+                "如果片段中没有包含问题的答案，请明确告诉用户'根据现有课程内容，无法找到答案'，不要编造。"
+                "回答时尽量引用相关片段的编号，并说明来自哪门课程。"
+            )
+            user_prompt = f"""
+            以下是多门课程的内容片段，按相关性排序：
 
-        {context}
+            {context}
 
-        用户问题：{question}
+            用户问题：{question}
 
-        请基于以上内容回答，并引用相关片段的编号。
-        """
+            要求：
+            1. 仅基于以上片段内容回答。
+            2. 如果片段中没有答案，明确说明无法找到。
+            3. 引用相关片段编号 [1]、[2] 等。
+            """
+        else:
+            system_prompt = (
+                "你是一位严谨的课程助教。请严格根据下面提供的课程内容片段回答用户问题。"
+                "如果片段中没有包含问题的答案，请明确告诉用户'根据现有课程内容，无法找到答案'，不要编造。"
+                "回答时尽量引用相关片段的编号。"
+            )
+            user_prompt = f"""
+            以下是课程内容片段，按相关性排序：
+
+            {context}
+
+            用户问题：{question}
+
+            要求：
+            1. 仅基于以上片段内容回答。
+            2. 如果片段中没有答案，明确说明无法找到。
+            3. 引用相关片段编号 [1]、[2] 等。
+            """
 
         answer = self.llm.chat(system_prompt, user_prompt, max_tokens=1500)
 
@@ -344,30 +491,69 @@ class RAGEngine:
         }
 
     def query_all(self, question: str) -> dict:
-        """基于所有课程内容回答问题（全局搜索）。"""
+        """基于所有课程内容回答问题（全局搜索）。
+
+        先通过全局 RAG 定位相关课程，再把相关课程的完整文本拼起来回答。
+        """
         docs = self._retrieve(self.GLOBAL_COLLECTION, self.GLOBAL_COLLECTION, question)
 
-        context_parts = []
-        for i, doc in enumerate(docs, 1):
-            context_parts.append(f"[{i}] {doc.page_content}")
-        context = "\n\n".join(context_parts)
+        # 收集相关课程 ID，按 RRF 分数排序去重
+        course_ids: list[int] = []
+        seen = set()
+        for doc in docs:
+            cid = doc.metadata.get("course_id")
+            if cid is not None and cid not in seen:
+                course_ids.append(cid)
+                seen.add(cid)
 
-        system_prompt = "你是一位课程助教，根据提供的多门课程内容回答问题。如果内容中没有答案，请明确告知用户。"
+        if not course_ids:
+            return self._answer_with_docs(question, docs, multi_course=True)
+
+        # 取前 N 门相关课程，避免上下文爆炸
+        course_ids = course_ids[:3]
+        context_parts = []
+        sources = []
+        for cid in course_ids:
+            full_text = self._load_course_full_text(cid)
+            if not full_text:
+                continue
+            context_parts.append(f"===== 课程 {cid} =====\n{full_text}")
+            sources.append(
+                {
+                    "type": "course_full_text",
+                    "timestamp": 0,
+                    "text": full_text[:200],
+                    "course_id": cid,
+                    "course_title": None,
+                }
+            )
+
+        if not context_parts:
+            return self._answer_with_docs(question, docs, multi_course=True)
+
+        context = "\n\n".join(context_parts)
+        system_prompt = (
+            "你是一位严谨的课程助教。请严格根据下面提供的多门完整课程内容回答用户问题。"
+            "如果内容中没有包含问题的答案，请明确告诉用户'根据现有课程内容，无法找到答案'，不要编造。"
+        )
         user_prompt = f"""
-        以下是多门课程的内容片段：
+        以下是多门课程的完整内容：
 
         {context}
 
         用户问题：{question}
 
-        请基于以上内容回答，并引用相关片段的编号。
+        要求：
+        1. 仅基于以上课程内容回答。
+        2. 如果内容中没有答案，明确说明无法找到。
+        3. 回答时尽量说明来自哪门课程或哪个时间点。
         """
 
         answer = self.llm.chat(system_prompt, user_prompt, max_tokens=1500)
 
         return {
             "answer": answer,
-            "sources": self._format_sources(docs),
+            "sources": sources,
         }
 
     def delete_index(self, course_id: int) -> None:
@@ -412,3 +598,10 @@ class RAGEngine:
             self._rebuild_global_bm25(persist_dir)
         except Exception as e:
             logger.warning("重建全局 BM25 索引失败 course=%s: %s", course_id, e)
+
+
+def format_timestamp(seconds: float) -> str:
+    """将秒数格式化为 mm:ss。"""
+    m = int(seconds // 60)
+    s = int(seconds % 60)
+    return f"{m}:{s:02d}"

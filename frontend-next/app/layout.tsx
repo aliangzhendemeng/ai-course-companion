@@ -1,7 +1,7 @@
 import type { Metadata } from "next"
 import "./globals.css"
 import { Providers } from "./providers"
-import { Sidebar } from "@/components/Sidebar"
+import { Shell } from "@/components/Shell"
 
 export const metadata: Metadata = {
   title: "AI 慕课学伴",
@@ -14,13 +14,10 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="zh-CN">
-      <body className="antialiased">
+    <html lang="zh-CN" suppressHydrationWarning>
+      <body className="min-h-screen bg-background text-foreground antialiased">
         <Providers>
-          <div className="flex min-h-screen">
-            <Sidebar />
-            <main className="ml-64 flex-1 bg-background">{children}</main>
-          </div>
+          <Shell>{children}</Shell>
         </Providers>
       </body>
     </html>
