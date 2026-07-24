@@ -5,7 +5,7 @@ from langchain_community.vectorstores import Chroma
 from langchain_community.vectorstores.utils import filter_complex_metadata
 from langchain_core.documents import Document
 
-from backend.ai.factory import create_llm
+from backend.ai.factory import create_chat_llm
 from backend.ai.llm.base import BaseLLM
 from backend.config import settings
 
@@ -18,7 +18,7 @@ class RAGEngine:
         llm: BaseLLM | None = None,
         embedding_model: str = "BAAI/bge-base-zh-v1.5",
     ) -> None:
-        self.llm = llm or create_llm()
+        self.llm = llm or create_chat_llm()
         self.embeddings = HuggingFaceEmbeddings(model_name=embedding_model)
         self.top_k = settings.rag_top_k
 

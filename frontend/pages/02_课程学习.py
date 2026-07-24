@@ -65,10 +65,10 @@ start_time = default_timestamp or last_position
 
 # 视频播放
 st.header("视频播放")
-video_path = course["video_path"]
+video_url = course["video_url"]
 
 # 用 Streamlit 原生播放器，从开始时间播放
-st.video(video_path, start_time=int(start_time))
+st.video(video_url, start_time=int(start_time))
 
 # 如果指定了时间戳，提示用户
 if start_time > 0:

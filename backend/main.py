@@ -3,7 +3,9 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from backend.config import settings
 from backend.database import create_db_and_tables
 from backend.logger import setup_logging
 from backend.api import chat, courses, progress, summaries
@@ -18,6 +20,20 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AI 慕课学伴", lifespan=lifespan)
+
+# 配置 CORS，允许 Streamlit 与 Next.js 前端访问
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        settings.frontend_origin,
+        "http://localhost:3000",
+        "http://localhost:8501",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Range", "Accept-Ranges"],
+)
 
 app.include_router(courses.router, prefix="/api/courses", tags=["courses"])
 app.include_router(summaries.router, prefix="/api/summaries", tags=["summaries"])

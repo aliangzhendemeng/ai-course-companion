@@ -24,7 +24,7 @@ class CourseListItem(BaseModel):
 class CourseDetail(BaseModel):
     id: int
     title: str
-    video_path: str
+    video_url: str
     duration: float | None
     status: str
     status_message: str | None
@@ -39,11 +39,24 @@ class SummaryResponse(BaseModel):
     lecture_notes: str | None
 
 
+class Source(BaseModel):
+    """RAG 来源片段。"""
+
+    type: str
+    timestamp: float
+    text: str
+    course_id: int | None = None
+    course_title: str | None = None
+    frame_id: int | None = None
+    transcript_id: int | None = None
+
+
 class ChatRequest(BaseModel):
     question: str
+    scope: str = "course"  # "course" | "all"
 
 
 class ChatResponse(BaseModel):
     course_id: int
     answer: str
-    sources: list[dict] | None
+    sources: list[Source] | None

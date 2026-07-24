@@ -1,10 +1,12 @@
 """课程相关 API。"""
 
 import hashlib
+import mimetypes
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks, Request
+from fastapi.responses import StreamingResponse
 
 from backend.ai.processor import VideoProcessor
 from backend.config import settings
@@ -27,6 +29,24 @@ def _compute_file_hash(file: UploadFile) -> str:
         hasher.update(chunk)
     file.file.seek(0)
     return hasher.hexdigest()
+
+
+def _get_video_url(course_id: int, request: Request) -> str:
+    """构造视频流 URL。"""
+    return str(request.url_for("stream_course_video", course_id=course_id))
+
+
+def _guess_media_type(video_path: Path) -> str:
+    """根据文件后缀猜测视频 MIME 类型。"""
+    ext = video_path.suffix.lower()
+    mapping = {
+        ".mp4": "video/mp4",
+        ".mkv": "video/x-matroska",
+        ".mov": "video/quicktime",
+        ".avi": "video/x-msvideo",
+        ".webm": "video/webm",
+    }
+    return mapping.get(ext) or mimetypes.guess_type(str(video_path))[0] or "application/octet-stream"
 
 
 @router.get("", response_model=list[CourseListItem])
@@ -84,13 +104,94 @@ def upload_course(
 
 
 @router.get("/{course_id}", response_model=CourseDetail)
-def get_course(course_id: int):
+def get_course(course_id: int, request: Request):
     """获取课程详情。"""
     service = CourseService()
     course = service.get_course(course_id)
     if not course:
         raise HTTPException(status_code=404, detail="课程不存在")
-    return course
+
+    return CourseDetail(
+        id=course.id,
+        title=course.title,
+        video_url=_get_video_url(course_id, request),
+        duration=course.duration,
+        status=course.status,
+        status_message=course.status_message,
+        created_at=course.created_at,
+        updated_at=course.updated_at,
+    )
+
+
+@router.get("/{course_id}/video")
+def stream_course_video(course_id: int, request: Request):
+    """流式返回课程视频，支持 Range 请求。"""
+    service = CourseService()
+    course = service.get_course(course_id)
+    if not course:
+        raise HTTPException(status_code=404, detail="课程不存在")
+
+    video_path = Path(course.video_path)
+    if not video_path.exists():
+        raise HTTPException(status_code=404, detail="视频文件不存在")
+
+    media_type = _guess_media_type(video_path)
+    file_size = video_path.stat().st_size
+
+    def iter_file(start: int = 0, end: int | None = None):
+        with open(video_path, "rb") as f:
+            f.seek(start)
+            remaining = (end - start + 1) if end is not None else (file_size - start)
+            chunk_size = settings.video_stream_chunk_size
+            while remaining > 0:
+                to_read = min(chunk_size, remaining)
+                data = f.read(to_read)
+                if not data:
+                    break
+                yield data
+                remaining -= len(data)
+
+    range_header = request.headers.get("range")
+    if range_header:
+        # 仅支持单区间 "bytes=start-end" 或 "bytes=start-"
+        try:
+            unit, ranges = range_header.split("=")
+            if unit.strip().lower() != "bytes":
+                raise ValueError("不支持的 Range 单位")
+            start_str, end_str = ranges.split("-")
+            start = int(start_str)
+            end = int(end_str) if end_str else file_size - 1
+            if start >= file_size or end >= file_size:
+                raise HTTPException(
+                    status_code=416,
+                    detail="Range 超出文件范围",
+                    headers={"Content-Range": f"bytes */{file_size}"},
+                )
+            content_length = end - start + 1
+            headers = {
+                "Content-Type": media_type,
+                "Content-Length": str(content_length),
+                "Content-Range": f"bytes {start}-{end}/{file_size}",
+                "Accept-Ranges": "bytes",
+            }
+            return StreamingResponse(
+                iter_file(start, end),
+                status_code=206,
+                media_type=media_type,
+                headers=headers,
+            )
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=f"无效的 Range 头: {e}") from e
+
+    headers = {
+        "Accept-Ranges": "bytes",
+        "Content-Length": str(file_size),
+    }
+    return StreamingResponse(
+        iter_file(),
+        media_type=media_type,
+        headers=headers,
+    )
 
 
 @router.delete("/{course_id}")
