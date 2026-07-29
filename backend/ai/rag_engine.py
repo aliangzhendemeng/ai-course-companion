@@ -313,17 +313,23 @@ class RAGEngine:
         collection_name: str,
         bm25_name: str,
         question: str,
+        course_filter: list[int] | None = None,
     ) -> list[Document]:
-        """执行向量 + BM25 混合检索并 RRF 融合。"""
+        """执行向量 + BM25 混合检索并 RRF 融合。
+
+        course_filter：限定只检索这些课程的文档（学习集/多课程场景）。
+        向量检索用 Chroma where 过滤；BM25 结果在应用层按 course_id 过滤。
+        """
         persist_dir = self._get_persist_directory()
 
-        # 向量检索
+        # 向量检索（Chroma where 过滤课程）
         vectorstore = Chroma(
             collection_name=collection_name,
             embedding_function=self.embeddings,
             persist_directory=persist_dir,
         )
-        vector_docs = vectorstore.similarity_search(question, k=self.vector_k)
+        where = {"course_id": {"$in": course_filter}} if course_filter else None
+        vector_docs = vectorstore.similarity_search(question, k=self.vector_k, filter=where)
 
         # 构建 doc_id -> Document 映射
         doc_by_id: dict[str, Document] = {}
@@ -331,7 +337,7 @@ class RAGEngine:
             doc_id = doc.metadata.get("doc_id") or doc.page_content
             doc_by_id[str(doc_id)] = doc
 
-        # BM25 检索
+        # BM25 检索（应用层按 course_id 过滤）
         bm25_results = self._query_bm25(bm25_name, question, self.bm25_k)
         for doc_id, _ in bm25_results:
             if doc_id not in doc_by_id:
@@ -339,9 +345,13 @@ class RAGEngine:
                 try:
                     chroma_doc = vectorstore.get(ids=[doc_id], include=["documents", "metadatas"])
                     if chroma_doc and chroma_doc["documents"]:
+                        meta = chroma_doc["metadatas"][0] or {}
+                        # 课程过滤：不在范围内的 BM25 候选直接跳过
+                        if course_filter and meta.get("course_id") not in course_filter:
+                            continue
                         doc_by_id[doc_id] = Document(
                             page_content=chroma_doc["documents"][0],
-                            metadata=chroma_doc["metadatas"][0] or {},
+                            metadata=meta,
                         )
                 except Exception:
                     pass
@@ -534,11 +544,29 @@ class RAGEngine:
         }
 
     def query_all(self, question: str) -> dict:
-        """基于所有课程内容回答问题（全局搜索）。
+        """基于所有课程内容回答问题（全局搜索）。"""
+        return self._query_across_courses(question, course_filter=None)
 
-        先通过全局 RAG 定位相关课程，再把相关课程的完整文本拼起来回答。
+    def query_multiple(self, course_ids: list[int], question: str) -> dict:
+        """基于指定的若干门课程回答问题（学习集/多课程范围）。
+
+        与 query_all 的区别：检索与全文拼接都限制在 course_ids 范围内，
+        不引入其他课程的内容。
         """
-        docs = self._retrieve(self.GLOBAL_COLLECTION, self.GLOBAL_COLLECTION, question)
+        if not course_ids:
+            return {
+                "answer": "学习集内暂无可用课程（可能都未处理完成或已被删除）。",
+                "debug": {"model": getattr(self.llm, "model_identifier", "unknown"), "prompt": "", "context": "", "raw_answer": ""},
+                "sources": [],
+            }
+        return self._query_across_courses(question, course_filter=course_ids)
+
+    def _query_across_courses(self, question: str, course_filter: list[int] | None) -> dict:
+        """跨课程回答核心：先全局检索定位相关课程，再拼接这些课的完整文本回答。
+
+        course_filter 为 None 表示全部课程；否则限定在指定课程集合内。
+        """
+        docs = self._retrieve(self.GLOBAL_COLLECTION, self.GLOBAL_COLLECTION, question, course_filter=course_filter)
 
         # 收集相关课程 ID，按 RRF 分数排序去重
         course_ids: list[int] = []

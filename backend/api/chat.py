@@ -13,7 +13,12 @@ def ask_question(course_id: int, request: ChatRequest):
     """向课程提问。"""
     service = ChatService()
     try:
-        result = service.ask(course_id, request.question, scope=request.scope)
+        result = service.ask(
+            course_id,
+            request.question,
+            scope=request.scope,
+            course_ids=request.course_ids,
+        )
         return ChatResponse(
             course_id=course_id,
             answer=result["answer"],

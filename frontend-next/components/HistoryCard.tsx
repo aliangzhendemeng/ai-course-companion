@@ -1,11 +1,11 @@
-import { Trash2, MessageSquare, Globe, BookOpen, User, Bot } from "lucide-react"
+import { Trash2, MessageSquare, Globe, BookOpen, User, Bot, Layers } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { deduplicateSources, formatTimestamp } from "@/lib/timestamp"
-import type { HistoryItem, Source } from "@/lib/api"
+import type { HistoryItem, Source, ChatScope } from "@/lib/api"
 
 export interface QAPair {
   question?: HistoryItem
@@ -18,10 +18,28 @@ interface HistoryCardProps {
   onDebug?: (id: number) => void
 }
 
+const SCOPE_META: Record<ChatScope, { label: string; icon: typeof Globe }> = {
+  all: { label: "全局搜索", icon: Globe },
+  set: { label: "学习集", icon: Layers },
+  course: { label: "课程问答", icon: BookOpen },
+}
+
 export function HistoryCard({ pair, onDelete, onDebug }: HistoryCardProps) {
   const answer = pair.answer
-  const isGlobal = (answer?.scope ?? pair.question?.scope) === "all"
-  const courseTitle = answer?.course_title ?? pair.question?.course_title
+  const scope: ChatScope = (answer?.scope ?? pair.question?.scope ?? "course") as ChatScope
+  const meta = SCOPE_META[scope] ?? SCOPE_META.course
+  const ScopeIcon = meta.icon
+
+  // 显示归属：优先用实际涉及的课程名（set/all），否则用锚点课程名
+  const involvedTitles = answer?.course_titles ?? pair.question?.course_titles ?? []
+  const anchorTitle = answer?.course_title ?? pair.question?.course_title
+  const displayTitles =
+    scope === "course" || involvedTitles.length === 0
+      ? anchorTitle
+        ? [anchorTitle]
+        : []
+      : involvedTitles
+
   const sourceGroups = answer ? deduplicateSources(normalizeSources(answer.sources)) : []
   const createdAt = answer?.created_at ?? pair.question?.created_at
 
@@ -30,12 +48,14 @@ export function HistoryCard({ pair, onDelete, onDebug }: HistoryCardProps) {
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-2">
-            <Badge variant={isGlobal ? "default" : "secondary"} className="gap-1">
-              {isGlobal ? <Globe className="h-3 w-3" /> : <BookOpen className="h-3 w-3" />}
-              {isGlobal ? "全局搜索" : "课程问答"}
+            <Badge variant={scope === "all" ? "default" : "secondary"} className="gap-1">
+              <ScopeIcon className="h-3 w-3" />
+              {meta.label}
             </Badge>
-            {courseTitle && (
-              <span className="text-sm text-muted-foreground">{courseTitle}</span>
+            {displayTitles.length > 0 && (
+              <span className="text-sm text-muted-foreground">
+                {displayTitles.join("、")}
+              </span>
             )}
           </div>
           <div className="flex items-center gap-1">

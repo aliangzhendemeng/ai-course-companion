@@ -24,17 +24,23 @@ import {
   getCourseFramesDebug,
   getCourseSummaryDebug,
   getChatDebug,
+  listStudySets,
+  createStudySet,
+  updateStudySet,
+  deleteStudySet,
   type Course,
   type CourseDetail,
   type Summary,
   type ChatResponse,
   type ChatMessage,
+  type ChatScope,
   type Settings,
   type HistoryItem,
   type TranscriptDebug,
   type FrameDebug,
   type SummaryDebug,
   type ChatDebug,
+  type StudySet,
 } from "@/lib/api"
 
 export function useCourses(options?: Partial<UseQueryOptions<Course[], Error>>) {
@@ -105,11 +111,52 @@ export function useReprocessCourse() {
 
 export function useAskQuestion() {
   const queryClient = useQueryClient()
-  return useMutation<ChatResponse, Error, { courseId: number; question: string; scope: "course" | "all" }>({
-    mutationFn: ({ courseId, question, scope }) => askQuestion(courseId, question, scope),
+  return useMutation<ChatResponse, Error, { courseId: number; question: string; scope: ChatScope; courseIds?: number[] }>({
+    mutationFn: ({ courseId, question, scope, courseIds }) => askQuestion(courseId, question, scope, courseIds),
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ["chat", variables.courseId, "history"] })
       queryClient.invalidateQueries({ queryKey: ["history"] })
+    },
+  })
+}
+
+// ---- 学习集 ----
+
+export function useStudySets(options?: Partial<UseQueryOptions<StudySet[], Error>>) {
+  return useQuery<StudySet[], Error>({
+    queryKey: ["study-sets"],
+    queryFn: listStudySets,
+    staleTime: 1000,
+    ...options,
+  })
+}
+
+export function useCreateStudySet() {
+  const queryClient = useQueryClient()
+  return useMutation<StudySet, Error, { name: string; courseIds: number[] }>({
+    mutationFn: ({ name, courseIds }) => createStudySet(name, courseIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["study-sets"] })
+    },
+  })
+}
+
+export function useUpdateStudySet() {
+  const queryClient = useQueryClient()
+  return useMutation<StudySet, Error, { id: number; name?: string; course_ids?: number[] }>({
+    mutationFn: ({ id, ...payload }) => updateStudySet(id, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["study-sets"] })
+    },
+  })
+}
+
+export function useDeleteStudySet() {
+  const queryClient = useQueryClient()
+  return useMutation<void, Error, number>({
+    mutationFn: deleteStudySet,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["study-sets"] })
     },
   })
 }

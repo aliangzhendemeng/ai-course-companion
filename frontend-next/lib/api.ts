@@ -2,6 +2,9 @@
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8000"
 
+// 问答范围：单课程 / 全部课程 / 学习集（自定义课程组合）
+export type ChatScope = "course" | "all" | "set"
+
 export interface Course {
   id: number
   title: string
@@ -38,7 +41,7 @@ export interface ChatMessage {
   id?: number
   role: "user" | "assistant"
   content: string
-  scope?: "course" | "all"
+  scope?: ChatScope
   sources?: Source[] | null
   created_at?: string
   course_id?: number
@@ -69,10 +72,13 @@ export interface HistoryItem {
   course_id: number
   role: "user" | "assistant"
   content: string
-  scope: "course" | "all"
+  scope: ChatScope
   sources: Source[] | null
   created_at: string
   course_title?: string
+  /** set/all 实际涉及的课程 id 与名称（优先于锚点 course_title 显示） */
+  course_ids?: number[]
+  course_titles?: string[]
 }
 
 export interface TranscriptDebug {
@@ -109,7 +115,7 @@ export interface ChatDebug {
   context: string
   raw_answer: string
   sources: Source[] | null
-  scope?: "course" | "all"
+  scope?: ChatScope
   created_at?: string
 }
 
@@ -155,12 +161,54 @@ export async function getSummary(courseId: number): Promise<Summary> {
   return request<Summary>(`/api/summaries/${courseId}`)
 }
 
-export async function askQuestion(courseId: number, question: string, scope: "course" | "all"): Promise<ChatResponse> {
+export async function askQuestion(
+  courseId: number,
+  question: string,
+  scope: ChatScope,
+  courseIds?: number[],
+): Promise<ChatResponse> {
   return request<ChatResponse>(`/api/chat/${courseId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, scope }),
+    body: JSON.stringify({ question, scope, course_ids: courseIds ?? null }),
   })
+}
+
+// ---- 学习集（自定义课程组合）----
+
+export interface StudySet {
+  id: number
+  name: string
+  course_ids: number[]
+  course_titles: string[]
+  created_at: string
+}
+
+export async function listStudySets(): Promise<StudySet[]> {
+  return request<StudySet[]>("/api/study-sets")
+}
+
+export async function createStudySet(name: string, courseIds: number[]): Promise<StudySet> {
+  return request<StudySet>("/api/study-sets", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, course_ids: courseIds }),
+  })
+}
+
+export async function updateStudySet(
+  id: number,
+  payload: { name?: string; course_ids?: number[] },
+): Promise<StudySet> {
+  return request<StudySet>(`/api/study-sets/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteStudySet(id: number): Promise<void> {
+  await request(`/api/study-sets/${id}`, { method: "DELETE" })
 }
 
 export async function getChatHistory(courseId: number): Promise<ChatMessage[]> {

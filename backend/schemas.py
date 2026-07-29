@@ -55,7 +55,8 @@ class Source(BaseModel):
 
 class ChatRequest(BaseModel):
     question: str
-    scope: str = "course"  # "course" | "all"
+    scope: str = "course"  # "course" | "all" | "set"
+    course_ids: list[int] | None = None  # scope="set" 时指定的课程集合
 
 
 class ChatResponse(BaseModel):
@@ -63,3 +64,21 @@ class ChatResponse(BaseModel):
     answer: str
     sources: list[Source] | None
     answer_message_id: int | None = None
+
+
+class StudySetCreate(BaseModel):
+    name: str
+    course_ids: list[int] = []
+
+
+class StudySetUpdate(BaseModel):
+    name: str | None = None
+    course_ids: list[int] | None = None  # 整体替换
+
+
+class StudySetItem(BaseModel):
+    id: int
+    name: str
+    course_ids: list[int]
+    course_titles: list[str]
+    created_at: datetime

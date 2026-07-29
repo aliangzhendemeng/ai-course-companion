@@ -130,6 +130,13 @@ class CourseService:
         except Exception:
             pass
 
+        # 清理该课程在所有学习集中的关联
+        try:
+            from backend.services.study_set_service import StudySetService
+            StudySetService(session).remove_course_everywhere(course_id)
+        except Exception:
+            pass
+
         session.delete(course)
         session.commit()
         if self._owns_session:
