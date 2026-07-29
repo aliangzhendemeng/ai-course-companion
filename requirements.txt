@@ -18,6 +18,7 @@ openai==1.3.0
 
 # ASR 与字幕
 faster-whisper==0.10.0
+opencc-python-reimplemented==0.1.7
 pysrt==1.1.2
 ffmpeg-python==0.2.0
 
@@ -33,10 +34,17 @@ paddlepaddle==3.0.0
 opencv-python==4.8.0.74
 pillow==10.1.0
 
-# 可选：Gemini Vision（预留）
-# google-generativeai==0.3.0
+# RAG 增强：混合检索
+bm25s>=0.2.0
+jieba>=0.42.1
 
-# 可选：Claude Vision（预留）
+# 重试机制
+tenacity>=8.2.0
+
+# 可选：Gemini（按需安装，代码中延迟导入）
+# google-generativeai>=0.3.0
+
+# 可选：Claude（按需安装，代码中延迟导入）
 # anthropic>=0.18.0
 
 # 前端

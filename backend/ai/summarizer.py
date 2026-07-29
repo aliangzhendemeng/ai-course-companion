@@ -2,7 +2,7 @@
 
 import json
 
-from backend.ai.factory import create_llm
+from backend.ai.factory import create_summary_llm
 from backend.ai.llm.base import BaseLLM
 
 
@@ -10,7 +10,7 @@ class Summarizer:
     """基于音频字幕和画面信息生成三级总结。"""
 
     def __init__(self, llm: BaseLLM | None = None) -> None:
-        self.llm = llm or create_llm()
+        self.llm = llm or create_summary_llm()
 
     def summarize(
         self,

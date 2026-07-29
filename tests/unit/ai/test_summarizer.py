@@ -7,11 +7,13 @@ from backend.ai.summarizer import Summarizer
 
 class FakeLLM:
     def chat(self, system_prompt: str, user_prompt: str, max_tokens: int = 2000) -> str:
-        if "大纲" in user_prompt:
+        if "整理课程大纲" in user_prompt:
             return json.dumps([{"title": "第一章", "timestamp": 0.0}])
-        if "摘要" in user_prompt:
+        if "总结课程的核心知识点" in user_prompt:
             return "这是摘要"
-        return "这是讲义"
+        if "编写一份详细讲义" in user_prompt:
+            return "这是讲义"
+        return "默认回复"
 
 
 def test_summarizer_build_context():

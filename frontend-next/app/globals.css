@@ -1,0 +1,80 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 166 76% 97%;
+    --foreground: 174 75% 18%;
+    --card: 0 0% 100%;
+    --card-foreground: 174 75% 18%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 174 75% 18%;
+    --primary: 174 84% 31%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 196 33% 93%;
+    --secondary-foreground: 174 75% 18%;
+    --muted: 196 33% 93%;
+    --muted-foreground: 180 45% 32%;
+    --accent: 32 91% 44%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 49%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 166 71% 72%;
+    --input: 215 20% 80%;
+    --ring: 174 84% 31%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 174 40% 10%;
+    --foreground: 166 76% 95%;
+    --card: 174 35% 14%;
+    --card-foreground: 166 76% 95%;
+    --popover: 174 35% 14%;
+    --popover-foreground: 166 76% 95%;
+    --primary: 168 76% 50%;
+    --primary-foreground: 174 40% 10%;
+    --secondary: 174 30% 22%;
+    --secondary-foreground: 166 76% 95%;
+    --muted: 174 30% 22%;
+    --muted-foreground: 166 40% 70%;
+    --accent: 32 91% 50%;
+    --accent-foreground: 174 40% 10%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 174 30% 25%;
+    --input: 174 30% 25%;
+    --ring: 168 76% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html {
+    @apply bg-background text-foreground;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

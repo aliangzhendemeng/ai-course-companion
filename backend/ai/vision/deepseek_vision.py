@@ -13,10 +13,15 @@ from backend.core.ocr_engine import OCREngine
 class DeepSeekVisionAnalyzer(BaseVisionAnalyzer):
     """DeepSeek-VL 视觉分析器。"""
 
-    def __init__(self, api_key: str | None = None, ocr_engine: OCREngine | None = None) -> None:
-        self.api_key = api_key or settings.deepseek_api_key
+    def __init__(
+        self,
+        api_key: str | None = None,
+        model_name: str | None = None,
+        ocr_engine: OCREngine | None = None,
+    ) -> None:
+        self.api_key = api_key or settings.deepseek_api_key or settings.vision_api_key
         self.client = OpenAI(api_key=self.api_key, base_url="https://api.deepseek.com/v1")
-        self.model = "deepseek-vl-chat"
+        self.model = model_name or "deepseek-vl-chat"
         self.ocr_engine = ocr_engine or OCREngine()
 
     def understand_frame(self, image_path: str | Path) -> str:

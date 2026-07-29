@@ -10,3 +10,8 @@ class BaseLLM(ABC):
     def chat(self, system_prompt: str, user_prompt: str, max_tokens: int = 2000) -> str:
         """调用 LLM 生成文本。"""
         pass
+
+    @property
+    def model_identifier(self) -> str:
+        """返回模型标识，子类应重写。"""
+        return "unknown"

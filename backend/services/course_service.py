@@ -26,16 +26,23 @@ class CourseService:
     def create_course(self, title: str, video_path: str | Path, duration: float | None = None, file_hash: str | None = None) -> Course:
         """创建课程记录。"""
         session = self._get_session()
+        safe_video_path = str(video_path) if video_path else "__pending__"
         course = Course(
             title=title,
-            video_path=str(video_path),
+            video_path=safe_video_path,
             duration=duration,
             file_hash=file_hash,
             status="uploaded",
         )
         session.add(course)
+        session.flush()
+        # 如果创建时 video_path 为占位，使用 id 保证唯一性
+        if course.video_path == "__pending__":
+            course.video_path = f"__pending__{course.id}__"
+            session.add(course)
         session.commit()
-        session.refresh(course)
+        # 访问一次 id 避免关闭 session 后触发懒加载
+        _ = course.id
         if self._owns_session:
             session.close()
         return course
@@ -120,6 +127,13 @@ class CourseService:
         try:
             from backend.ai.rag_engine import RAGEngine
             RAGEngine().delete_index(course_id)
+        except Exception:
+            pass
+
+        # 清理该课程在所有学习集中的关联
+        try:
+            from backend.services.study_set_service import StudySetService
+            StudySetService(session).remove_course_everywhere(course_id)
         except Exception:
             pass
 

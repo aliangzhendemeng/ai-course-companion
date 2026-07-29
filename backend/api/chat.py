@@ -13,11 +13,17 @@ def ask_question(course_id: int, request: ChatRequest):
     """向课程提问。"""
     service = ChatService()
     try:
-        result = service.ask(course_id, request.question)
+        result = service.ask(
+            course_id,
+            request.question,
+            scope=request.scope,
+            course_ids=request.course_ids,
+        )
         return ChatResponse(
             course_id=course_id,
             answer=result["answer"],
             sources=result["sources"],
+            answer_message_id=result.get("answer_message_id"),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

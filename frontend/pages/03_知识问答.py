@@ -1,5 +1,7 @@
 """Streamlit 知识问答页面。"""
 
+import json
+
 import requests
 import streamlit as st
 
@@ -33,6 +35,14 @@ selected = st.selectbox(
 )
 course_id = selected["id"]
 
+# 搜索范围选择
+scope = st.radio(
+    "搜索范围",
+    options=["course", "all"],
+    format_func=lambda x: "当前课程" if x == "course" else "全部课程",
+    horizontal=True,
+)
+
 # 提问
 st.header("提问")
 question = st.text_area("输入你的问题", placeholder="例如：请解释视频中提到的神经网络结构")
@@ -41,7 +51,7 @@ if st.button("发送") and question:
     with st.spinner("思考中..."):
         response = requests.post(
             f"{API_BASE}/api/chat/{course_id}",
-            json={"question": question},
+            json={"question": question, "scope": scope},
         )
 
     if response.status_code == 200:
@@ -55,12 +65,18 @@ if st.button("发送") and question:
                 timestamp = source.get("timestamp", 0)
                 source_type = source.get("type", "")
                 text = source.get("text", "")
+                source_course_id = source.get("course_id")
+                source_course_title = source.get("course_title") or selected["title"]
 
                 col1, col2 = st.columns([1, 4])
                 with col1:
-                    if st.button(f"⏱️ {timestamp:.1f}s", key=f"ts_{timestamp}_{source_type}"):
+                    target_course_id = source_course_id or course_id
+                    btn_label = f"⏱️ {timestamp:.1f}s"
+                    if scope == "all" and source_course_id and source_course_id != course_id:
+                        btn_label = f"📚 {source_course_title}\n{btn_label}"
+                    if st.button(btn_label, key=f"ts_{timestamp}_{source_type}_{source_course_id or 0}"):
                         st.experimental_set_query_params(
-                            course_id=str(course_id),
+                            course_id=str(target_course_id),
                             timestamp=str(timestamp),
                         )
                         st.switch_page("pages/02_课程学习.py")
