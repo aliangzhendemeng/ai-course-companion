@@ -54,12 +54,12 @@ export function ChatPageClient({ initialCourses }: ChatPageClientProps) {
               : []
           }
           isLoading={askMutation.isPending}
-          onSend={(question) =>
-            askMutation.mutate({ courseId: anchorCourseId, question, scope: "all" })
+          onSend={(question, scope, courseIds) =>
+            askMutation.mutate({ courseId: anchorCourseId, question, scope, courseIds })
           }
           onSeek={handleSeek}
           defaultScope="all"
-          lockScope
+          hideCourseScope
           title="全局搜索"
         />
       ) : (

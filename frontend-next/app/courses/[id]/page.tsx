@@ -86,7 +86,9 @@ export default function CourseDetailPage() {
             courseId={courseId}
             messages={history || []}
             isLoading={historyLoading || askMutation.isPending}
-            onSend={(question, scope) => askMutation.mutate({ courseId, question, scope })}
+            onSend={(question, scope, courseIds) =>
+              askMutation.mutate({ courseId, question, scope, courseIds })
+            }
             onSeek={handleSeek}
           />
         </div>
