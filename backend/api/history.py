@@ -1,5 +1,8 @@
 """问答历史 API。"""
 
+import json
+from datetime import timezone
+
 from fastapi import APIRouter, HTTPException
 from sqlmodel import Session, select
 
@@ -7,6 +10,16 @@ from backend.database import engine
 from backend.models import ChatMessage, Course
 
 router = APIRouter()
+
+
+def _to_utc_iso(dt) -> str:
+    """把时间戳序列化为带时区的 UTC ISO 字符串，前端才能正确解析为 UTC。
+
+    历史数据库存的是 naive UTC（无时区）， naive 时按 UTC 补上 +00:00。
+    """
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
 
 
 @router.get("")
@@ -19,19 +32,33 @@ def list_history():
             .order_by(ChatMessage.created_at.desc())
         )
         results = session.exec(statement).all()
-        return [
-            {
-                "id": msg.id,
-                "course_id": msg.course_id,
-                "course_title": title,
-                "role": msg.role,
-                "content": msg.content,
-                "scope": msg.scope,
-                "sources": msg.sources,
-                "created_at": msg.created_at,
-            }
-            for msg, title in results
-        ]
+
+        # 预取所有课程标题，便于把 course_ids 展开成课程名
+        titles = {c.id: c.title for c in session.exec(select(Course)).all()}
+
+        items = []
+        for msg, anchor_title in results:
+            involved_ids: list[int] = []
+            if msg.course_ids:
+                try:
+                    involved_ids = [int(x) for x in json.loads(msg.course_ids)]
+                except (ValueError, TypeError):
+                    involved_ids = []
+            items.append(
+                {
+                    "id": msg.id,
+                    "course_id": msg.course_id,
+                    "course_title": anchor_title,
+                    "course_ids": involved_ids,
+                    "course_titles": [titles.get(cid, f"课程 {cid}") for cid in involved_ids],
+                    "role": msg.role,
+                    "content": msg.content,
+                    "scope": msg.scope,
+                    "sources": msg.sources,
+                    "created_at": _to_utc_iso(msg.created_at),
+                }
+            )
+        return items
 
 
 @router.delete("/{message_id}")

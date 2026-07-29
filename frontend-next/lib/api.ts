@@ -76,6 +76,9 @@ export interface HistoryItem {
   sources: Source[] | null
   created_at: string
   course_title?: string
+  /** set/all 实际涉及的课程 id 与名称（优先于锚点 course_title 显示） */
+  course_ids?: number[]
+  course_titles?: string[]
 }
 
 export interface TranscriptDebug {

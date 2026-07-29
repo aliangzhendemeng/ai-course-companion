@@ -42,6 +42,9 @@ class ChatService:
         else:
             result = self.rag_engine.query(course_id, question)
 
+        # set/all 范围：记录实际涉及的课程 id，供历史页正确显示归属（而非锚点课程）
+        involved_ids = self._involved_course_ids(course_ids, result)
+
         # 保存用户问题
         with Session(engine) as session:
             user_msg = ChatMessage(
@@ -49,12 +52,14 @@ class ChatService:
                 role="user",
                 content=question,
                 scope=scope,
+                course_ids=json.dumps(involved_ids) if involved_ids else None,
             )
             assistant_msg = ChatMessage(
                 course_id=course_id,
                 role="assistant",
                 content=result["answer"],
                 scope=scope,
+                course_ids=json.dumps(involved_ids) if involved_ids else None,
                 sources=json.dumps(result["sources"], ensure_ascii=False),
                 debug_info=json.dumps(result.get("debug", {}), ensure_ascii=False),
             )
@@ -64,6 +69,20 @@ class ChatService:
             session.refresh(assistant_msg)
 
         return {**result, "answer_message_id": assistant_msg.id}
+
+    def _involved_course_ids(
+        self, course_ids: list[int] | None, result: dict
+    ) -> list[int]:
+        """set/all 范围下，消息实际涉及的课程 id 列表。"""
+        if course_ids:
+            return sorted(set(course_ids))
+        # all / 其它：从来源里提取实际命中的课程
+        ids = {
+            s.get("course_id")
+            for s in (result.get("sources") or [])
+            if s.get("course_id") is not None
+        }
+        return sorted(ids)
 
     def get_history(self, course_id: int) -> list[ChatMessage]:
         """获取问答历史。"""
