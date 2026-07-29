@@ -25,35 +25,37 @@ cp .env.example .env
 # 编辑 .env，填入你的 DEEPSEEK_API_KEY
 ```
 
-### 3. 启动后端
+### 3. 一键启动（推荐）
+
+同时启动后端与前端，并自动打开浏览器：
+
+- **macOS**：双击 `启动AI慕课学伴.command`（首次如被拦截，右键 → 打开）
+- **Windows**：双击 `start_app.bat`
+- **命令行**（macOS / Linux）：`./start_app.sh`
+
+- 后端运行在 http://127.0.0.1:8000，前端运行在 http://localhost:3000
+- 在启动终端按 `Ctrl+C` 可一并停止前后端
+- `./start_app.sh --no-open` 启动但不自动打开浏览器
+
+### 4. 单独启动（开发调试）
 
 ```bash
-./start_backend.sh
+# 后端（另开一个终端）
+./venv/bin/python run.py
+
+# 前端（另开一个终端）
+cd frontend-next && npm run dev
 ```
 
-后端服务将运行在 http://127.0.0.1:8000
+#### 旧版 Streamlit 前端（可选，已非主力）
 
-### 4. 启动前端
-
-项目提供两个前端，可任选其一：
-
-#### Streamlit 前端（原有）
+项目仍保留 Streamlit 前端作为备选，访问 http://localhost:8501：
 
 ```bash
-./start_frontend.sh
+python run_frontend.py
 ```
 
-访问 http://localhost:8501
-
-#### Next.js 现代前端（新增）
-
-```bash
-./start_frontend_next.sh
-```
-
-访问 http://localhost:3000
-
-> 两个启动脚本会自动切换到项目根目录、激活虚拟环境，并从正确路径读取 `.streamlit/config.toml` 中的 2GB 上传限制。
+> 主前端为 `frontend-next`（Next.js），Streamlit 前端不再随一键脚本启动。
 
 ## 项目结构
 
@@ -80,9 +82,10 @@ ai-course-companion/
 ├── tests/                # 测试
 ├── requirements.txt
 ├── run.py                # 后端启动脚本（Python）
-├── run_frontend.py       # 前端启动脚本（Python）
-├── start_backend.sh      # 后端一键启动脚本（Bash）
-└── start_frontend.sh     # 前端一键启动脚本（Bash）
+├── run_frontend.py       # 旧版 Streamlit 前端启动脚本（可选）
+├── start_app.sh          # 一键启动（macOS / Linux，命令行）
+├── start_app.bat         # 一键启动（Windows，双击）
+└── 启动AI慕课学伴.command  # 一键启动（macOS，双击）
 ```
 
 ## 视频上传说明
@@ -103,7 +106,7 @@ A: 数据库路径已改为基于项目根目录的绝对路径。如果仍有�
 
 **Q: 上传大视频时提示超过 200MB 限制？**
 
-A: 请使用 `python run_frontend.py` 启动前端，确保读取到项目根目录 `.streamlit/config.toml` 中的 2GB 上传限制。直接运行 `streamlit run frontend/Home.py` 时，若当前目录不是项目根目录，会忽略该配置。
+A: 该限制仅存在于旧版 Streamlit 前端。使用 `python run_frontend.py` 启动可读取项目根目录 `.streamlit/config.toml` 中的 2GB 上传限制。新版 Next.js 前端（`frontend-next`，一键启动默认入口）无此问题。
 
 ## 开发命令
 

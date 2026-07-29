@@ -81,6 +81,11 @@ fi
 check_port "$BACKEND_PORT" "后端"
 check_port "$FRONTEND_PORT" "前端"
 
+# 离线加载 HuggingFace 模型，避免网络超时阻塞请求（Whisper/embedding 已缓存）
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export TOKENIZERS_PARALLELISM=false
+
 # ---- 启动后端 ----
 log "启动后端  → http://localhost:$BACKEND_PORT"
 ./venv/bin/python run.py > /tmp/ai-course-backend.log 2>&1 &

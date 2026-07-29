@@ -41,6 +41,10 @@ if %errorlevel%==0 (
 )
 
 echo [启动] 后端  -^> http://localhost:%BACKEND_PORT%
+REM 离线加载 HuggingFace 模型，避免网络超时阻塞请求
+set HF_HUB_OFFLINE=1
+set TRANSFORMERS_OFFLINE=1
+set TOKENIZERS_PARALLELISM=false
 start "AI慕课学伴-后端" /min cmd /c "venv\Scripts\python.exe run.py"
 
 echo [启动] 前端  -^> http://localhost:%FRONTEND_PORT%
