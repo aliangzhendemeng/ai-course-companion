@@ -15,15 +15,23 @@ interface CoursesClientProps {
 }
 
 export function CoursesClient({ initialCourses }: CoursesClientProps) {
+  const [isUploading, setIsUploading] = useState(false)
+  const [search, setSearch] = useState("")
+
+  const hasProcessing = (courses?: Course[]) =>
+    courses?.some((c) => c.status !== "completed" && c.status !== "failed") ?? false
+
   const { data: courses, isLoading } = useCourses({
     initialData: initialCourses,
-    staleTime: 5000,
+    staleTime: 0,
+    refetchInterval: (query) => {
+      const data = query.state.data as Course[] | undefined
+      return hasProcessing(data) ? 2000 : false
+    },
   })
   const uploadMutation = useUploadCourse()
   const deleteMutation = useDeleteCourse()
   const reprocessMutation = useReprocessCourse()
-  const [isUploading, setIsUploading] = useState(false)
-  const [search, setSearch] = useState("")
 
   const filteredCourses =
     courses?.filter((c) => c.title.toLowerCase().includes(search.toLowerCase())) || []

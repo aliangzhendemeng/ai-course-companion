@@ -36,18 +36,22 @@ class ChatService:
                 course_id=course_id,
                 role="user",
                 content=question,
+                scope=scope,
             )
             assistant_msg = ChatMessage(
                 course_id=course_id,
                 role="assistant",
                 content=result["answer"],
+                scope=scope,
                 sources=json.dumps(result["sources"], ensure_ascii=False),
+                debug_info=json.dumps(result.get("debug", {}), ensure_ascii=False),
             )
             session.add(user_msg)
             session.add(assistant_msg)
             session.commit()
+            session.refresh(assistant_msg)
 
-        return result
+        return {**result, "answer_message_id": assistant_msg.id}
 
     def get_history(self, course_id: int) -> list[ChatMessage]:
         """获取问答历史。"""

@@ -15,7 +15,7 @@ class DeepSeekLLM(BaseLLM):
         model_name: str | None = None,
         base_url: str | None = None,
     ) -> None:
-        self.api_key = api_key or settings.deepseek_api_key
+        self.api_key = api_key or settings.deepseek_api_key or settings.chat_api_key or settings.summary_api_key
         self.model = model_name or "deepseek-chat"
         self.base_url = base_url or "https://api.deepseek.com/v1"
         self.client = OpenAI(api_key=self.api_key, base_url=self.base_url)
@@ -32,3 +32,8 @@ class DeepSeekLLM(BaseLLM):
             temperature=0.2,
         )
         return response.choices[0].message.content or ""
+
+    @property
+    def model_identifier(self) -> str:
+        """返回模型标识。"""
+        return f"deepseek:{self.model}"

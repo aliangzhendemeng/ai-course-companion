@@ -13,6 +13,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { MarkdownRenderer } from "@/components/MarkdownRenderer"
+import { deduplicateSources, formatTimestamp } from "@/lib/timestamp"
 import type { Source, ChatMessage } from "@/lib/api"
 
 interface ChatPanelProps {
@@ -21,11 +23,23 @@ interface ChatPanelProps {
   isLoading?: boolean
   onSend: (question: string, scope: "course" | "all") => void
   onSeek?: (timestamp: number, courseId?: number) => void
+  defaultScope?: "course" | "all"
+  lockScope?: boolean
+  title?: string
 }
 
-export function ChatPanel({ courseId, messages, isLoading, onSend, onSeek }: ChatPanelProps) {
+export function ChatPanel({
+  courseId,
+  messages,
+  isLoading,
+  onSend,
+  onSeek,
+  defaultScope = "course",
+  lockScope = false,
+  title = "知识问答",
+}: ChatPanelProps) {
   const [input, setInput] = useState("")
-  const [scope, setScope] = useState<"course" | "all">("course")
+  const [scope, setScope] = useState<"course" | "all">(defaultScope)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -44,26 +58,33 @@ export function ChatPanel({ courseId, messages, isLoading, onSend, onSeek }: Cha
   return (
     <div className="flex h-full flex-col rounded-xl border bg-card shadow-sm">
       <div className="flex items-center justify-between border-b p-4">
-        <h3 className="font-semibold">知识问答</h3>
-        <Select value={scope} onValueChange={(v) => setScope(v as "course" | "all")}>
-          <SelectTrigger className="w-36">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="course">
-              <span className="flex items-center gap-2">
-                <BookOpen className="h-4 w-4" />
-                当前课程
-              </span>
-            </SelectItem>
-            <SelectItem value="all">
-              <span className="flex items-center gap-2">
-                <Globe className="h-4 w-4" />
-                全部课程
-              </span>
-            </SelectItem>
-          </SelectContent>
-        </Select>
+        <h3 className="font-semibold">{title}</h3>
+        {lockScope ? (
+          <span className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Globe className="h-3.5 w-3.5" />
+            全部课程
+          </span>
+        ) : (
+          <Select value={scope} onValueChange={(v) => setScope(v as "course" | "all")}>
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="course">
+                <span className="flex items-center gap-2">
+                  <BookOpen className="h-4 w-4" />
+                  当前课程
+                </span>
+              </SelectItem>
+              <SelectItem value="all">
+                <span className="flex items-center gap-2">
+                  <Globe className="h-4 w-4" />
+                  全部课程
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       <ScrollArea ref={scrollRef} className="flex-1 p-4">
@@ -117,7 +138,7 @@ function MessageBubble({
   onSeek?: (timestamp: number, courseId?: number) => void
 }) {
   const isUser = message.role === "user"
-  const sources = normalizeSources(message.sources)
+  const groups = deduplicateSources(normalizeSources(message.sources))
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
@@ -127,13 +148,13 @@ function MessageBubble({
             : "rounded-tl-sm border bg-background"
         }`}
       >
-        <p className="whitespace-pre-wrap">{message.content}</p>
-        {!isUser && sources.length > 0 ? (
+        <MarkdownRenderer>{message.content}</MarkdownRenderer>
+        {!isUser && groups.length > 0 ? (
           <div className="mt-3 space-y-2">
             <p className="text-xs font-medium text-muted-foreground">参考来源</p>
             <div className="flex flex-wrap gap-2">
-              {sources.map((source, idx) => (
-                <SourceChip key={idx} source={source} onSeek={onSeek} />
+              {groups.map((group, idx) => (
+                <SourceChip key={idx} group={group} onSeek={onSeek} />
               ))}
             </div>
           </div>
@@ -157,16 +178,25 @@ function normalizeSources(sources: ChatMessage["sources"]): Source[] {
   return []
 }
 
-function SourceChip({ source, onSeek }: { source: Source; onSeek?: (timestamp: number, courseId?: number) => void }) {
-  const label = source.course_title && source.course_id ? `${source.course_title} · ` : ""
-  const time = formatTime(source.timestamp)
+function SourceChip({
+  group,
+  onSeek,
+}: {
+  group: import("@/lib/timestamp").DeduplicatedSource
+  onSeek?: (timestamp: number, courseId?: number) => void
+}) {
+  const first = group.sources[0]
+  const label = group.courseTitle ? `${group.courseTitle} · ` : ""
+  const count = group.sources.length
+  const time = formatTimestamp(group.timestamp)
   return (
     <button
-      onClick={() => onSeek?.(source.timestamp, source.course_id || undefined)}
-      className="max-w-[200px] truncate rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-      title={`${source.type} · ${time} · ${source.text}`}
+      onClick={() => onSeek?.(group.timestamp, first.course_id || undefined)}
+      className="max-w-[220px] truncate rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+      title={`${first.type} · ${time} · ${first.text}`}
     >
       {label}{time}
+      {count > 1 && <span className="ml-1 text-[10px] opacity-80">({count} 个来源)</span>}
     </button>
   )
 }

@@ -19,7 +19,7 @@ class DeepSeekVisionAnalyzer(BaseVisionAnalyzer):
         model_name: str | None = None,
         ocr_engine: OCREngine | None = None,
     ) -> None:
-        self.api_key = api_key or settings.deepseek_api_key
+        self.api_key = api_key or settings.deepseek_api_key or settings.vision_api_key
         self.client = OpenAI(api_key=self.api_key, base_url="https://api.deepseek.com/v1")
         self.model = model_name or "deepseek-vl-chat"
         self.ocr_engine = ocr_engine or OCREngine()

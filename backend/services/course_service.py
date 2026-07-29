@@ -41,7 +41,8 @@ class CourseService:
             course.video_path = f"__pending__{course.id}__"
             session.add(course)
         session.commit()
-        session.refresh(course)
+        # 访问一次 id 避免关闭 session 后触发懒加载
+        _ = course.id
         if self._owns_session:
             session.close()
         return course

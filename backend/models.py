@@ -16,6 +16,7 @@ class Course(SQLModel, table=True):
     duration: Optional[float] = None
     status: str = Field(default="uploaded", index=True)
     status_message: Optional[str] = None
+    progress_percent: int = Field(default=0)
     frame_interval: Optional[float] = None
     max_frames: Optional[int] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -78,7 +79,9 @@ class ChatMessage(SQLModel, table=True):
     course_id: int = Field(foreign_key="course.id", index=True)
     role: str  # "user" 或 "assistant"
     content: str
+    scope: str = Field(default="course")  # "course" 或 "all"
     sources: Optional[str] = None  # JSON 字符串
+    debug_info: Optional[str] = None  # JSON 字符串：prompt、context、model、raw_answer
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
     course: Course = Relationship(back_populates="chat_messages")

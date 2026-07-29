@@ -35,11 +35,11 @@ def _resolve_api_key(role_key: str, provider_name: str) -> str:
         return role_key
     provider_name = provider_name.lower()
     if provider_name == "deepseek":
-        return settings.deepseek_api_key
+        return settings.deepseek_api_key or settings.chat_api_key or settings.summary_api_key
     if provider_name == "gemini":
-        return settings.gemini_api_key
+        return settings.gemini_api_key or settings.chat_api_key or settings.summary_api_key
     if provider_name == "claude":
-        return settings.claude_api_key
+        return settings.claude_api_key or settings.chat_api_key or settings.summary_api_key
     return ""
 
 

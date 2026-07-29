@@ -17,7 +17,7 @@ class ClaudeVisionAnalyzer(BaseVisionAnalyzer):
     ) -> None:
         import anthropic
 
-        self.api_key = api_key or settings.claude_api_key
+        self.api_key = api_key or settings.claude_api_key or settings.vision_api_key
         self.model_name = model_name or "claude-3-5-sonnet-20241022"
         self.client = anthropic.Anthropic(api_key=self.api_key)
 

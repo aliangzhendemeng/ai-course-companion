@@ -1,12 +1,14 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { BookOpen, MessageCircle, Library, GraduationCap } from "lucide-react"
+import { BookOpen, MessageCircle, Library, GraduationCap, Settings, History } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
 const navItems = [
   { href: "/courses", label: "课程库", icon: Library },
-  { href: "/chat", label: "知识问答", icon: MessageCircle },
+  { href: "/chat", label: "全局搜索", icon: MessageCircle },
+  { href: "/history", label: "问答历史", icon: History },
+  { href: "/settings", label: "设置", icon: Settings },
 ]
 
 export function Sidebar() {

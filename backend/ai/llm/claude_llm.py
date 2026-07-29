@@ -10,7 +10,7 @@ class ClaudeLLM(BaseLLM):
     def __init__(self, api_key: str | None = None, model_name: str | None = None) -> None:
         import anthropic
 
-        self.api_key = api_key or settings.claude_api_key
+        self.api_key = api_key or settings.claude_api_key or settings.chat_api_key or settings.summary_api_key
         self.model_name = model_name or "claude-3-5-sonnet-20241022"
         self.client = anthropic.Anthropic(api_key=self.api_key)
 
@@ -26,3 +26,8 @@ class ClaudeLLM(BaseLLM):
         if content and len(content) > 0:
             return content[0].text
         return ""
+
+    @property
+    def model_identifier(self) -> str:
+        """返回模型标识。"""
+        return f"claude:{self.model_name}"

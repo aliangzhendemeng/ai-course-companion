@@ -266,16 +266,40 @@ class RAGEngine:
         docs = [Document(page_content=text, metadata=meta or {}) for text, meta in zip(documents, metadatas)]
         self._save_bm25(self.GLOBAL_COLLECTION, docs, ids)
 
-    def _format_sources(self, docs: list[Document], course_title: str | None = None) -> list[dict]:
-        """将 Document 格式化为来源列表。"""
+    def _get_course_titles(self, course_ids: list[int]) -> dict[int, str]:
+        """按 course_id 批量查询课程标题。"""
+        if not course_ids:
+            return {}
+        from backend.models import Course
+        titles: dict[int, str] = {}
+        with Session(engine) as session:
+            for cid in course_ids:
+                course = session.get(Course, cid)
+                if course:
+                    titles[cid] = course.title
+        return titles
+
+    def _format_sources(
+        self,
+        docs: list[Document],
+        course_titles: dict[int, str] | None = None,
+        fallback_title: str | None = None,
+    ) -> list[dict]:
+        """将 Document 格式化为来源列表，附带课程名和真实时间戳。"""
         sources = []
         for doc in docs:
+            course_id = doc.metadata.get("course_id")
+            title = None
+            if course_titles and course_id in course_titles:
+                title = course_titles[course_id]
+            elif fallback_title:
+                title = fallback_title
             source = {
                 "type": doc.metadata.get("source_type"),
-                "timestamp": doc.metadata.get("timestamp"),
+                "timestamp": doc.metadata.get("timestamp") or 0,
                 "text": doc.page_content[:200],
-                "course_id": doc.metadata.get("course_id"),
-                "course_title": course_title,
+                "course_id": course_id,
+                "course_title": title,
             }
             if doc.metadata.get("frame_id"):
                 source["frame_id"] = doc.metadata["frame_id"]
@@ -423,20 +447,30 @@ class RAGEngine:
         3. 回答尽量准确、完整。
         """
 
-        answer = self.llm.chat(system_prompt, user_prompt, max_tokens=1500)
+        raw_answer = self.llm.chat(system_prompt, user_prompt, max_tokens=1500)
 
-        # sources 保留一个整课来源，前端可跳转
+        # 用检索片段生成带真实时间戳和课程名的来源，而不是 0:00 占位
+        collection_name = self._get_collection_name(course_id)
+        try:
+            source_docs = self._retrieve(collection_name, collection_name, question)
+        except Exception as e:
+            logger.warning("全文问答来源检索失败 course=%s: %s", course_id, e)
+            source_docs = []
+        course_titles = self._get_course_titles([course_id])
+
         return {
-            "answer": answer,
-            "sources": [
-                {
-                    "type": "course_full_text",
-                    "timestamp": 0,
-                    "text": full_text[:200],
-                    "course_id": course_id,
-                    "course_title": None,
-                }
-            ],
+            "answer": raw_answer,
+            "debug": {
+                "model": getattr(self.llm, "model_identifier", "unknown"),
+                "prompt": f"system:\n{system_prompt}\n\nuser:\n{user_prompt}",
+                "context": full_text,
+                "raw_answer": raw_answer,
+            },
+            "sources": self._format_sources(
+                source_docs,
+                course_titles=course_titles,
+                fallback_title=course_titles.get(course_id),
+            ),
         }
 
     def _answer_with_docs(self, question: str, docs: list[Document], multi_course: bool) -> dict:
@@ -485,9 +519,18 @@ class RAGEngine:
 
         answer = self.llm.chat(system_prompt, user_prompt, max_tokens=1500)
 
+        course_ids = list({doc.metadata.get("course_id") for doc in docs if doc.metadata.get("course_id") is not None})
+        course_titles = self._get_course_titles(course_ids)
+
         return {
             "answer": answer,
-            "sources": self._format_sources(docs),
+            "debug": {
+                "model": getattr(self.llm, "model_identifier", "unknown"),
+                "prompt": f"system:\n{system_prompt}\n\nuser:\n{user_prompt}",
+                "context": context,
+                "raw_answer": answer,
+            },
+            "sources": self._format_sources(docs, course_titles=course_titles),
         }
 
     def query_all(self, question: str) -> dict:
@@ -511,22 +554,14 @@ class RAGEngine:
 
         # 取前 N 门相关课程，避免上下文爆炸
         course_ids = course_ids[:3]
+        course_titles = self._get_course_titles(course_ids)
         context_parts = []
-        sources = []
         for cid in course_ids:
             full_text = self._load_course_full_text(cid)
             if not full_text:
                 continue
-            context_parts.append(f"===== 课程 {cid} =====\n{full_text}")
-            sources.append(
-                {
-                    "type": "course_full_text",
-                    "timestamp": 0,
-                    "text": full_text[:200],
-                    "course_id": cid,
-                    "course_title": None,
-                }
-            )
+            title = course_titles.get(cid, f"课程 {cid}")
+            context_parts.append(f"===== {title} =====\n{full_text}")
 
         if not context_parts:
             return self._answer_with_docs(question, docs, multi_course=True)
@@ -551,8 +586,17 @@ class RAGEngine:
 
         answer = self.llm.chat(system_prompt, user_prompt, max_tokens=1500)
 
+        # 用全局检索片段作为来源，带课程名和时间戳
+        sources = self._format_sources(docs, course_titles=course_titles)
+
         return {
             "answer": answer,
+            "debug": {
+                "model": getattr(self.llm, "model_identifier", "unknown"),
+                "prompt": f"system:\n{system_prompt}\n\nuser:\n{user_prompt}",
+                "context": context,
+                "raw_answer": answer,
+            },
             "sources": sources,
         }
 

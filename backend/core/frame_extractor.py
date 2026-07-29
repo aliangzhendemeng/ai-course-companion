@@ -64,6 +64,26 @@ class FrameExtractor:
 
         return frames
 
+    def _phash(self, frame: np.ndarray, hash_size: int = 8) -> np.ndarray:
+        """计算感知哈希（基于 DCT），用于检测视觉相似的幻灯片。
+
+        返回一个 hash_size*hash_size 位的 0/1 数组。
+        """
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        # 缩放到 4 倍 hash_size 再做 DCT，取左上角低频分量
+        img_size = hash_size * 4
+        small = cv2.resize(gray, (img_size, img_size), interpolation=cv2.INTER_AREA)
+        dct = cv2.dct(np.float32(small))
+        dct_low = dct[:hash_size, :hash_size]
+        # 以中位数为阈值，排除直流分量（左上角）以免整图亮度影响
+        median = np.median(dct_low.flatten()[1:])
+        return (dct_low > median).flatten()
+
+    @staticmethod
+    def _hamming(a: np.ndarray, b: np.ndarray) -> int:
+        """两个哈希之间的汉明距离。"""
+        return int(np.count_nonzero(a != b))
+
     def _save_frame(self, frame: np.ndarray, timestamp: float, output_dir: Path) -> dict:
         """保存单帧并返回信息。"""
         frame_filename = f"frame_{timestamp:.2f}.jpg"
@@ -113,7 +133,11 @@ class FrameExtractor:
         duration: float,
         output_dir: Path,
     ) -> list[dict]:
-        """基于场景变化检测抽帧。"""
+        """基于场景变化检测抽帧。
+
+        除了与上一关键帧比较直方图判断场景变化外，还用感知哈希对"所有"已保存
+        关键帧去重：当讲师反复回到同一张幻灯片时，视觉上相同的帧只保留首次出现。
+        """
         frames = []
         last_keyframe_time = -self.min_scene_interval
         last_keyframe_hist = None
@@ -123,6 +147,11 @@ class FrameExtractor:
         # 取 frame_interval 与 duration/max_frames 的较大值，避免产生过多帧
         fallback_interval = max(self.frame_interval, duration / self.max_frames) if duration > 0 else self.frame_interval
         last_fallback_time = -fallback_interval
+
+        # 已保存关键帧的感知哈希，用于检测重复幻灯片
+        saved_hashes: list[np.ndarray] = []
+        # 两帧感知哈希汉明距离 <= 此阈值视为视觉重复（8x8=64 位）
+        dedup_threshold = 10
 
         while True:
             ret, frame = cap.read()
@@ -148,7 +177,22 @@ class FrameExtractor:
             fallback_due = (current_time - last_fallback_time) >= fallback_interval
 
             if scene_changed or fallback_due or last_keyframe_hist is None:
+                # 去重：与所有已保存关键帧比较，视觉重复则跳过（首帧除外）
+                if last_keyframe_hist is not None:
+                    ph = self._phash(frame)
+                    is_duplicate = any(self._hamming(ph, h) <= dedup_threshold for h in saved_hashes)
+                else:
+                    is_duplicate = False
+
+                if is_duplicate:
+                    # 视觉重复，不保存，但更新参考直方图以追踪当前画面
+                    last_keyframe_hist = hist
+                    last_keyframe_time = current_time
+                    last_fallback_time = current_time
+                    continue
+
                 frames.append(self._save_frame(frame, current_time, output_dir))
+                saved_hashes.append(self._phash(frame))
                 last_keyframe_time = current_time
                 last_keyframe_hist = hist
                 last_fallback_time = current_time

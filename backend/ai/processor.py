@@ -121,6 +121,9 @@ class VideoProcessor:
         upload_dir.mkdir(parents=True, exist_ok=True)
         frame_dir.mkdir(parents=True, exist_ok=True)
 
+        # 重新处理时先清掉旧的中间产物，避免新旧字幕/帧/RAG 索引堆叠
+        self._clear_old_course_data(course_id, frame_dir)
+
         video_path = Path(course.video_path)
         audio_path = upload_dir / "audio.wav"
 
@@ -128,18 +131,28 @@ class VideoProcessor:
             # 1. 提取音频
             self._update_status(course, "extracting_audio")
             duration = self.audio_extractor.get_duration(video_path)
-            self.course_service.update_status(
-                course_id,
-                course.status,
-                status_message=f"视频时长: {duration:.1f}s",
-            )
+            course.status_message = f"视频时长: {duration:.1f}s"
             course.duration = duration
             _save_course_duration(course_id, duration)
             self.audio_extractor.extract(video_path, audio_path)
 
+            # 检测音频是否近乎静音（无可用语音）
+            mean_volume = self.audio_extractor.get_mean_volume(audio_path)
+            low_audio = mean_volume < -40.0
+            if low_audio:
+                logger.warning("课程 %s 音频近乎静音（平均 %.1f dB），转写可能无有效内容", course_id, mean_volume)
+
             # 2. 语音识别
-            self._update_status(course, "transcribing")
+            self._update_status(
+                course,
+                "transcribing",
+                f"音频平均音量 {mean_volume:.1f} dB" + ("（近乎静音，可能无法转写）" if low_audio else ""),
+            )
             transcripts = self.asr_engine.transcribe(audio_path)
+            # 静音音频下 Whisper 会产生幻觉乱码，丢弃以免污染搜索与总结
+            if low_audio:
+                logger.warning("课程 %s 音频静音，丢弃 %d 条（疑似幻觉）字幕", course_id, len(transcripts))
+                transcripts = []
             self._save_transcripts(course_id, transcripts)
 
             # 3. 抽取关键帧
@@ -173,17 +186,64 @@ class VideoProcessor:
             self._get_rag_engine().index_course(course_id, transcripts, frame_models)
 
             # 7. 完成
-            self._update_status(course, "completed", "处理完成")
+            if low_audio:
+                done_msg = (
+                    f"处理完成，但音频近乎静音（平均 {mean_volume:.1f} dB），"
+                    "未转写出有效语音；课件图像识别（OCR/视觉）仍可用于问答。"
+                )
+            else:
+                done_msg = "处理完成"
+            self._update_status(course, "completed", done_msg)
 
         except Exception as e:
             logger.exception("课程处理失败: %s", course_id)
             self._update_status(course, "failed", str(e))
             raise
 
+    def _clear_old_course_data(self, course_id: int, frame_dir: Path) -> None:
+        """重新处理前清理旧的字幕、帧、总结和 RAG 索引，避免新旧数据堆叠。"""
+        import shutil
+
+        from backend.database import engine
+        from backend.models import Frame, Summary, Transcript
+        from sqlmodel import Session, delete
+
+        with Session(engine) as session:
+            session.exec(delete(Transcript).where(Transcript.course_id == course_id))
+            session.exec(delete(Frame).where(Frame.course_id == course_id))
+            session.exec(delete(Summary).where(Summary.course_id == course_id))
+            session.commit()
+
+        # 清理旧的帧图文件
+        if frame_dir.exists():
+            shutil.rmtree(frame_dir)
+            frame_dir.mkdir(parents=True, exist_ok=True)
+
+        # 清理旧的向量/BM25 索引（失败不阻断）
+        try:
+            self._get_rag_engine().delete_index(course_id)
+        except Exception as e:
+            logger.warning("清理旧 RAG 索引失败 course=%s: %s", course_id, e)
+
     def _update_status(self, course: Course, status: str, message: str | None = None) -> None:
         course.status = status
         course.status_message = message
-        self.course_service.update_status(course.id, status, message)
+        course.progress_percent = self._status_to_progress(status)
+        self.course_service.update_course(course)
+
+    def _status_to_progress(self, status: str) -> int:
+        mapping = {
+            "uploaded": 0,
+            "extracting_audio": 5,
+            "transcribing": 25,
+            "extracting_frames": 47,
+            "ocr_and_vision": 67,
+            "generating_summary": 85,
+            "indexing_rag": 95,
+            "completed": 100,
+            "failed": 100,
+        }
+        return mapping.get(status, 0)
 
     def _save_transcripts(self, course_id: int, transcripts: list[dict]) -> None:
         from backend.database import engine

@@ -1,19 +1,11 @@
 "use client"
 
-import { useState } from "react"
-import { Loader2 } from "lucide-react"
+import { Loader2, Globe } from "lucide-react"
 
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { useCourses, useAskQuestion } from "@/hooks/use-api"
 import { ChatPanel } from "@/components/ChatPanel"
 import { useRouter } from "next/navigation"
-import type { Course } from "@/lib/api"
+import type { Course, ChatMessage, Source } from "@/lib/api"
 
 interface ChatPageClientProps {
   initialCourses: Course[]
@@ -25,21 +17,14 @@ export function ChatPageClient({ initialCourses }: ChatPageClientProps) {
     initialData: initialCourses,
     staleTime: 5000,
   })
-  const [courseId, setCourseId] = useState<number | "">("")
-  const [scope, setScope] = useState<"course" | "all">("all")
-  const [input, setInput] = useState("")
   const askMutation = useAskQuestion()
 
   const completedCourses = courses?.filter((c) => c.status === "completed") || []
-
-  const handleSend = () => {
-    if (!courseId || !input.trim()) return
-    askMutation.mutate({ courseId, question: input.trim(), scope })
-    setInput("")
-  }
+  // 全局搜索无需选课；用第一个已完成课程作为问答记录的归档锚点
+  const anchorCourseId = completedCourses[0]?.id
 
   const handleSeek = (timestamp: number, targetCourseId?: number) => {
-    const id = targetCourseId || courseId
+    const id = targetCourseId || anchorCourseId
     if (id) {
       router.push(`/courses/${id}?timestamp=${timestamp}`)
     }
@@ -47,62 +32,43 @@ export function ChatPageClient({ initialCourses }: ChatPageClientProps) {
 
   return (
     <div className="container mx-auto flex h-[calc(100vh-1rem)] flex-col p-4">
-      <div className="mb-4 flex flex-wrap items-center gap-4">
-        <h1 className="text-2xl font-bold">知识问答</h1>
-        <div className="flex items-center gap-2">
-          {coursesLoading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Select
-              value={courseId.toString()}
-              onValueChange={(v) => setCourseId(Number(v))}
-            >
-              <SelectTrigger className="w-56">
-                <SelectValue placeholder="选择课程" />
-              </SelectTrigger>
-              <SelectContent>
-                {completedCourses.length === 0 ? (
-                  <SelectItem value="__empty__" disabled>
-                    暂无可用的已完成课程
-                  </SelectItem>
-                ) : (
-                  completedCourses.map((c) => (
-                    <SelectItem key={c.id} value={c.id.toString()}>
-                      {c.title}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
-          )}
-          <Select value={scope} onValueChange={(v) => setScope(v as "course" | "all")}>
-            <SelectTrigger className="w-36">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="course">当前课程</SelectItem>
-              <SelectItem value="all">全部课程</SelectItem>
-            </SelectContent>
-          </Select>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">全局搜索</h1>
+          <p className="flex items-center gap-1 text-sm text-muted-foreground">
+            <Globe className="h-3.5 w-3.5" />
+            跨所有课程检索答案，结果会标注来源课程与时间点
+          </p>
         </div>
+        <span className="rounded-full bg-muted px-3 py-1 text-xs text-muted-foreground">
+          {coursesLoading ? "加载中…" : `共 ${completedCourses.length} 门课程`}
+        </span>
       </div>
 
-      {courseId ? (
+      {anchorCourseId ? (
         <ChatPanel
-          courseId={courseId}
-          messages={askMutation.data ? buildMessages(askMutation.data, askMutation.variables) : []}
+          courseId={anchorCourseId}
+          messages={
+            askMutation.data
+              ? buildMessages(askMutation.data, askMutation.variables)
+              : []
+          }
           isLoading={askMutation.isPending}
-          onSend={(question, scope) => askMutation.mutate({ courseId, question, scope })}
+          onSend={(question) =>
+            askMutation.mutate({ courseId: anchorCourseId, question, scope: "all" })
+          }
           onSeek={handleSeek}
+          defaultScope="all"
+          lockScope
+          title="全局搜索"
         />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed text-muted-foreground">
-          <p className="mb-4">选择一门课程开始提问，或切换到“全部课程”进行跨课程搜索</p>
           {coursesLoading ? (
             <Loader2 className="h-6 w-6 animate-spin" />
-          ) : completedCourses.length === 0 ? (
-            <p>暂无可用的已完成课程</p>
-          ) : null}
+          ) : (
+            <p>还没有已完成的课程，无法进行全局搜索</p>
+          )}
         </div>
       )}
     </div>
@@ -110,10 +76,10 @@ export function ChatPageClient({ initialCourses }: ChatPageClientProps) {
 }
 
 function buildMessages(
-  data: { answer: string; sources: import("@/lib/api").Source[] | null },
+  data: { answer: string; sources: Source[] | null },
   variables?: { question: string }
-) {
-  const messages: import("@/lib/api").ChatMessage[] = []
+): ChatMessage[] {
+  const messages: ChatMessage[] = []
   if (variables?.question) {
     messages.push({ role: "user", content: variables.question })
   }

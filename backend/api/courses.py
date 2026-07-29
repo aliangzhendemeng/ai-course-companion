@@ -118,6 +118,7 @@ def get_course(course_id: int, request: Request):
         duration=course.duration,
         status=course.status,
         status_message=course.status_message,
+        progress_percent=course.progress_percent,
         created_at=course.created_at,
         updated_at=course.updated_at,
     )

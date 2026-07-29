@@ -18,7 +18,7 @@ class GeminiVisionAnalyzer(BaseVisionAnalyzer):
     ) -> None:
         import google.generativeai as genai
 
-        self.api_key = api_key or settings.gemini_api_key
+        self.api_key = api_key or settings.gemini_api_key or settings.vision_api_key
         self.model_name = model_name or "gemini-1.5-flash"
         genai.configure(api_key=self.api_key)
         self.client = genai.GenerativeModel(self.model_name)

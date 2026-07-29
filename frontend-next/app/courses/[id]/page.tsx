@@ -1,8 +1,8 @@
 "use client"
 
 import { useRef } from "react"
-import { useParams } from "next/navigation"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { ArrowLeft, Loader2, Stethoscope } from "lucide-react"
+import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
@@ -10,7 +10,6 @@ import { VideoPlayer, type VideoPlayerRef } from "@/components/VideoPlayer"
 import { SummaryTabs } from "@/components/SummaryTabs"
 import { ChatPanel } from "@/components/ChatPanel"
 import { useCourse, useSummary, useChatHistory, useAskQuestion } from "@/hooks/use-api"
-import { useRouter } from "next/navigation"
 
 export default function CourseDetailPage() {
   const params = useParams()
@@ -52,14 +51,22 @@ export default function CourseDetailPage() {
 
   return (
     <div className="container mx-auto flex h-[calc(100vh-1rem)] flex-col gap-4 p-4">
-      <div className="flex items-center gap-2">
-        <Link href="/courses">
-          <Button variant="ghost" size="sm">
-            <ArrowLeft className="mr-1 h-4 w-4" />
-            返回
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Link href="/courses">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="mr-1 h-4 w-4" />
+              返回
+            </Button>
+          </Link>
+          <h1 className="text-xl font-bold">{course.title}</h1>
+        </div>
+        <Link href={`/courses/${courseId}/debug`}>
+          <Button variant="outline" size="sm">
+            <Stethoscope className="mr-1 h-4 w-4" />
+            诊断
           </Button>
         </Link>
-        <h1 className="text-xl font-bold">{course.title}</h1>
       </div>
 
       <div className="grid flex-1 gap-4 lg:grid-cols-5">

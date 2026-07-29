@@ -17,6 +17,7 @@ class CourseListItem(BaseModel):
     title: str
     status: str
     status_message: str | None
+    progress_percent: int
     duration: float | None
     created_at: datetime
 
@@ -28,6 +29,7 @@ class CourseDetail(BaseModel):
     duration: float | None
     status: str
     status_message: str | None
+    progress_percent: int
     created_at: datetime
     updated_at: datetime
 
@@ -60,3 +62,4 @@ class ChatResponse(BaseModel):
     course_id: int
     answer: str
     sources: list[Source] | None
+    answer_message_id: int | None = None

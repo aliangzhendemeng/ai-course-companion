@@ -18,6 +18,7 @@ def ask_question(course_id: int, request: ChatRequest):
             course_id=course_id,
             answer=result["answer"],
             sources=result["sources"],
+            answer_message_id=result.get("answer_message_id"),
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

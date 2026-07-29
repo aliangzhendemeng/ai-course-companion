@@ -10,6 +10,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { Progress } from "@/components/ui/progress"
 import type { Course } from "@/lib/api"
 
 interface CourseCardProps {
@@ -83,18 +84,24 @@ export function CourseCard({ course, onDelete, onReprocess }: CourseCardProps) {
           <Clock className="h-3.5 w-3.5" />
           <span>{course.duration != null ? formatDuration(course.duration) : "时长未知"}</span>
         </div>
+        {processing && (
+          <div className="mt-3 space-y-1.5">
+            <Progress value={course.progress_percent} className="h-2" />
+            <p className="text-xs text-muted-foreground">{course.progress_percent}%</p>
+          </div>
+        )}
         <p className="mt-3 line-clamp-2 text-xs text-muted-foreground">
           {statusMessage(course.status, course.status_message)}
         </p>
       </CardContent>
       <CardFooter className="flex gap-2 pt-0">
         {isCompleted ? (
-          <Link href={`/courses/${course.id}`} className="flex-1">
-            <Button className="w-full gap-1.5" size="sm">
+          <Button asChild className="w-full gap-1.5" size="sm">
+            <Link href={`/courses/${course.id}`}>
               <Play className="h-4 w-4" />
               开始学习
-            </Button>
-          </Link>
+            </Link>
+          </Button>
         ) : (
           <Button
             className="flex-1 gap-1.5"
@@ -115,6 +122,10 @@ export function CourseCard({ course, onDelete, onReprocess }: CourseCardProps) {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onReprocess?.(course.id)}>
+              <RefreshCw className="mr-2 h-4 w-4" />
+              重新处理
+            </DropdownMenuItem>
             <DropdownMenuItem
               onClick={() => onDelete?.(course.id)}
               className="text-destructive focus:text-destructive"

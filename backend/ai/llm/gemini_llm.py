@@ -10,7 +10,7 @@ class GeminiLLM(BaseLLM):
     def __init__(self, api_key: str | None = None, model_name: str | None = None) -> None:
         import google.generativeai as genai
 
-        self.api_key = api_key or settings.gemini_api_key
+        self.api_key = api_key or settings.gemini_api_key or settings.chat_api_key or settings.summary_api_key
         self.model_name = model_name or "gemini-1.5-flash"
         genai.configure(api_key=self.api_key)
         self.client = genai.GenerativeModel(self.model_name)
@@ -24,3 +24,8 @@ class GeminiLLM(BaseLLM):
             generation_config=genai.GenerationConfig(max_output_tokens=max_tokens),
         )
         return response.text or ""
+
+    @property
+    def model_identifier(self) -> str:
+        """返回模型标识。"""
+        return f"gemini:{self.model_name}"

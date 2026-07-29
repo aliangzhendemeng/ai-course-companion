@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import settings
 from backend.database import create_db_and_tables
 from backend.logger import setup_logging
-from backend.api import chat, courses, progress, summaries
+from backend.api import chat, courses, debug, history, progress, settings as settings_api, summaries
 
 
 @asynccontextmanager
@@ -27,6 +27,8 @@ app.add_middleware(
     allow_origins=[
         settings.frontend_origin,
         "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
         "http://localhost:8501",
     ],
     allow_credentials=True,
@@ -38,7 +40,11 @@ app.add_middleware(
 app.include_router(courses.router, prefix="/api/courses", tags=["courses"])
 app.include_router(summaries.router, prefix="/api/summaries", tags=["summaries"])
 app.include_router(chat.router, prefix="/api/chat", tags=["chat"])
+app.include_router(history.router, prefix="/api/history", tags=["history"])
 app.include_router(progress.router, prefix="/api/progress", tags=["progress"])
+app.include_router(debug.router, prefix="/api/courses", tags=["debug"])
+app.include_router(debug.router, prefix="/api/chat", tags=["debug"])
+app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"])
 
 
 @app.get("/health")
