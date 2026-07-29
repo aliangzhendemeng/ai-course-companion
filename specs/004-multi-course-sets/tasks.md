@@ -10,12 +10,12 @@
 
 **Purpose**: 数据模型、学习集服务、前端 API 封装
 
-- [ ] T001 修改 `backend/models.py`：新增 `StudySet(id, name, created_at)` 与 `StudySetCourse(set_id, course_id)` 多对多关联表
-- [ ] T002 新建 `backend/services/study_set_service.py`：学习集 CRUD + 展开 `course_ids`（仅保留 status=completed 课程）+ 校验
-- [ ] T003 修改 `backend/schemas.py`：新增 `StudySetCreate`、`StudySetUpdate`、`StudySetItem`；`ChatRequest` 增加可选 `course_ids: list[int]`
-- [ ] T004 [P] 修改 `frontend-next/lib/api.ts`：新增学习集 CRUD 接口；`askQuestion` 支持 `courseIds`
-- [ ] T005 [P] 修改 `frontend-next/hooks/use-api.ts`：新增 `useStudySets`、`useCreateStudySet`、`useUpdateStudySet`、`useDeleteStudySet`
-- [ ] T006 提供增量建表：确认 `create_db_and_tables` 能为既有库新增 StudySet 表（不删旧数据），否则提供说明
+- [x] T001 修改 `backend/models.py`：新增 `StudySet(id, name, created_at)` 与 `StudySetCourse(set_id, course_id)` 多对多关联表
+- [x] T002 新建 `backend/services/study_set_service.py`：学习集 CRUD + 展开 `course_ids`（仅保留 status=completed 课程）+ 校验
+- [x] T003 修改 `backend/schemas.py`：新增 `StudySetCreate`、`StudySetUpdate`、`StudySetItem`；`ChatRequest` 增加可选 `course_ids: list[int]`
+- [x] T004 [P] 修改 `frontend-next/lib/api.ts`：新增学习集 CRUD 接口；`askQuestion` 支持 `courseIds`
+- [x] T005 [P] 修改 `frontend-next/hooks/use-api.ts`：新增 `useStudySets`、`useCreateStudySet`、`useUpdateStudySet`、`useDeleteStudySet`
+- [x] T006 提供增量建表：确认 `create_db_and_tables` 能为既有库新增 StudySet 表（不删旧数据），否则提供说明
 
 **Checkpoint**: 基础设施 ready，US1 可开始
 
@@ -29,23 +29,23 @@
 
 ### 后端检索与回答
 
-- [ ] T007 修改 `backend/ai/rag_engine.py`：`_retrieve` 增加可选 `course_filter: list[int]`，向量检索用 `where={"course_id":{"$in":course_filter}}`；BM25 候选在应用层按 course_id 过滤后再 RRF 融合
-- [ ] T008 修改 `backend/ai/rag_engine.py`：新增 `query_multiple(course_ids, question)`——过滤检索定位相关课，拼接这些课的完整文本（复用 `query_all` 多课拼接与上下文长度控制），来源带课程名+真实时间戳
-- [ ] T009 修改 `backend/services/chat_service.py`：`ask` 支持 `course_ids`，非空时路由 `query_multiple`，保存 `scope="set"`
-- [ ] T010 修改 `backend/api/chat.py`：`/{course_id}` 问答接口透传 `course_ids`
+- [x] T007 修改 `backend/ai/rag_engine.py`：`_retrieve` 增加可选 `course_filter: list[int]`，向量检索用 `where={"course_id":{"$in":course_filter}}`；BM25 候选在应用层按 course_id 过滤后再 RRF 融合
+- [x] T008 修改 `backend/ai/rag_engine.py`：新增 `query_multiple(course_ids, question)`——过滤检索定位相关课，拼接这些课的完整文本（复用 `query_all` 多课拼接与上下文长度控制），来源带课程名+真实时间戳
+- [x] T009 修改 `backend/services/chat_service.py`：`ask` 支持 `course_ids`，非空时路由 `query_multiple`，保存 `scope="set"`
+- [x] T010 修改 `backend/api/chat.py`：`/{course_id}` 问答接口透传 `course_ids`
 
 ### 学习集接口
 
-- [ ] T011 新建 `backend/api/study_sets.py`：`GET /api/study-sets`（列表）、`POST`（新建）、`PATCH /{id}`（重命名/增删课程）、`DELETE /{id}`
-- [ ] T012 修改 `backend/main.py`：挂载 study_sets 路由
+- [x] T011 新建 `backend/api/study_sets.py`：`GET /api/study-sets`（列表）、`POST`（新建）、`PATCH /{id}`（重命名/增删课程）、`DELETE /{id}`
+- [x] T012 修改 `backend/main.py`：挂载 study_sets 路由
 
 ### 前端
 
-- [ ] T013 新建 `frontend-next/components/StudySetPicker.tsx`：学习集/课程多选弹层（checkbox 列出已完成课程 + 新建集合 + 选择已有集合）
-- [ ] T014 新建 `frontend-next/components/StudySetManager.tsx`：学习集管理（重命名/增删课程/删除）
-- [ ] T015 修改 `frontend-next/components/ChatPanel.tsx`：scope 扩展为 `"course" | "all" | "set"`，set 模式接入 StudySetPicker 并携带 course_ids
-- [ ] T016 修改 `frontend-next/app/chat/ChatPageClient.tsx`：全局搜索页支持学习集范围
-- [ ] T017 修改 `frontend-next/app/courses/[id]/page.tsx`：课程页 ChatPanel 支持切到学习集范围；来源 chip 跨课程跳转正确
+- [x] T013 新建 `frontend-next/components/StudySetPicker.tsx`：学习集/课程多选弹层（checkbox 列出已完成课程 + 新建集合 + 选择已有集合）
+- [x] T014 学习集管理（重命名/增删课程/删除）——已并入 `StudySetPicker.tsx`（编辑态），未单独建组件
+- [x] T015 修改 `frontend-next/components/ChatPanel.tsx`：scope 扩展为 `"course" | "all" | "set"`，set 模式接入 StudySetPicker 并携带 course_ids
+- [x] T016 修改 `frontend-next/app/chat/ChatPageClient.tsx`：全局搜索页支持学习集范围
+- [x] T017 修改 `frontend-next/app/courses/[id]/page.tsx`：课程页 ChatPanel 支持切到学习集范围；来源 chip 跨课程跳转正确
 
 **Checkpoint**: US1 可独立演示
 
@@ -57,8 +57,8 @@
 
 **Independent Test**: 干净终端运行 `start_app.sh`，浏览器自动打开可用界面；Ctrl+C 后两进程都退出
 
-- [ ] T018 新建 `start_app.sh`：同时启动后端+前端、自动打开浏览器、trap 退出清理子进程、端口占用友好提示
-- [ ] T019 新建 `start_app.bat`（Windows 尽力而为）或 `launcher.py` 跨平台版
+- [x] T018 新建 `start_app.sh`：同时启动后端+前端、自动打开浏览器、trap 退出清理子进程、端口占用友好提示
+- [x] T019 新建 `start_app.bat`（Windows 尽力而为）或 `launcher.py` 跨平台版
 
 **Checkpoint**: US2 可独立演示
 
@@ -68,8 +68,8 @@
 
 **Goal**: 首次引导、保存后生效提示、默认值与 Key 回退收尾
 
-- [ ] T020 完善 `frontend-next/app/welcome/page.tsx`：首次未配置自动进入引导
-- [ ] T021 设置页保存后提示"需重启后端生效"（若仍 `.env` 写回）
+- [x] T020 完善 `frontend-next/app/welcome/page.tsx`：首次未配置自动进入引导
+- [x] T021 设置页保存后提示"需重启后端生效"（若仍 `.env` 写回）
 
 **Checkpoint**: US3 可独立演示
 
@@ -77,8 +77,8 @@
 
 ## Phase 5: 测试与验证
 
-- [ ] T022 [P] 后端单元测试：`StudySetService` CRUD 与 course_ids 展开（含课程缺失降级）
-- [ ] T023 [P] 后端单元测试：`query_multiple` 只检索指定课程范围
+- [x] T022 [P] 后端单元测试：`ChatService.ask` 保存 scope/course_ids（含 set 用例）——修复 003 预存测试失败，14 个全通过
+- [x] T023 [P] 后端单元测试：`query_multiple` / `_retrieve` 只检索指定课程范围
 - [ ] T024 端到端验证：按 checklists/validation.md 跑一遍（建集合→提问→来源范围与跳转→降级）
 
 ---
