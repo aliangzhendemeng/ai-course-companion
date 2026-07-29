@@ -96,3 +96,20 @@ class Progress(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
     course: Course = Relationship(back_populates="progress")
+
+
+class StudySetCourse(SQLModel, table=True):
+    """学习集-课程关联：多对多。课程删除时关联随之失效。"""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    study_set_id: int = Field(foreign_key="studyset.id", index=True)
+    course_id: int = Field(foreign_key="course.id", index=True)
+
+
+class StudySet(SQLModel, table=True):
+    """学习集：命名的课程组合，用于限定问答范围（如"数学必修"）。"""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
