@@ -119,3 +119,36 @@ class StudySet(SQLModel, table=True):
     name: str = Field(index=True)
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class Question(SQLModel, table=True):
+    """测验题：从课程内容生成的选择题/判断题。
+
+    范围：单课程（course_id）或学习集（study_set_id）二选一。
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    course_id: Optional[int] = Field(default=None, foreign_key="course.id", index=True)
+    study_set_id: Optional[int] = Field(default=None, foreign_key="studyset.id", index=True)
+    type: str = Field(default="choice")  # "choice" 选择 | "judge" 判断
+    question: str
+    options: Optional[str] = None  # JSON 数组（选择题选项）
+    answer: str  # 选择题存选项序号("A"/"B"...)，判断题存 "正确"/"错误"
+    explanation: Optional[str] = None
+    source_course_id: Optional[int] = Field(default=None, index=True)  # 来源课程（学习集时标注具体哪门课）
+    source_timestamp: Optional[float] = None  # 来源时间点（秒），可跳回视频
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
+class Flashcard(SQLModel, table=True):
+    """闪卡：从课程内容生成的正/反面记忆卡。"""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    course_id: Optional[int] = Field(default=None, foreign_key="course.id", index=True)
+    study_set_id: Optional[int] = Field(default=None, foreign_key="studyset.id", index=True)
+    front: str  # 正面：概念/问题
+    back: str  # 背面：解释/答案
+    familiarity: str = Field(default="unknown", index=True)  # known 认识 | fuzzy 模糊 | unknown 不认识
+    source_course_id: Optional[int] = Field(default=None, index=True)
+    source_timestamp: Optional[float] = None
+    created_at: datetime = Field(default_factory=_utcnow)

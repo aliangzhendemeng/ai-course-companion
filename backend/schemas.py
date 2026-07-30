@@ -82,3 +82,78 @@ class StudySetItem(BaseModel):
     course_ids: list[int]
     course_titles: list[str]
     created_at: datetime
+
+
+# ===== 测验（Question）=====
+
+class QuestionItem(BaseModel):
+    """单道题（不含答案，作答前展示用）。"""
+
+    id: int
+    type: str  # "choice" | "judge"
+    question: str
+    options: list[str] | None = None
+    source_course_id: int | None = None
+    source_timestamp: float | None = None
+
+
+class QuestionDetail(QuestionItem):
+    """含答案与解析（判分后 / 列表展示用）。"""
+
+    answer: str
+    explanation: str | None = None
+
+
+class QuizGenerateRequest(BaseModel):
+    course_id: int | None = None
+    study_set_id: int | None = None
+    count: int = 12
+
+
+class QuizGenerateResponse(BaseModel):
+    generated: int  # 本次新生成题数
+    total: int  # 该范围当前总题数
+
+
+class QuizAnswerRequest(BaseModel):
+    answer: str  # 选择题 "A"/"B"...；判断题 "正确"/"错误"
+
+
+class QuizAnswerResponse(BaseModel):
+    question_id: int
+    correct: bool
+    answer: str  # 正确答案
+    explanation: str | None = None
+
+
+# ===== 闪卡（Flashcard）=====
+
+class FlashcardItem(BaseModel):
+    id: int
+    front: str
+    back: str
+    familiarity: str  # known | fuzzy | unknown
+    source_course_id: int | None = None
+    source_timestamp: float | None = None
+
+
+class FlashcardGenerateRequest(BaseModel):
+    course_id: int | None = None
+    study_set_id: int | None = None
+    count: int = 15
+
+
+class FlashcardGenerateResponse(BaseModel):
+    generated: int
+    total: int
+
+
+class FlashcardFamiliarityRequest(BaseModel):
+    familiarity: str  # known | fuzzy | unknown
+
+
+class FlashcardStats(BaseModel):
+    total: int
+    known: int
+    fuzzy: int
+    unknown: int
