@@ -187,16 +187,40 @@ class QuizService:
 
     def list_questions(
         self, course_id: int | None = None, study_set_id: int | None = None
-    ) -> list[Question]:
-        """列出某范围的全部题（含答案与解析，供前端展示/复习）。"""
+    ) -> list[tuple[Question, str | None, bool | None]]:
+        """列出某范围的全部题，每项为 (question, last_answer, last_correct)。
+
+        last_answer/last_correct 是该题最近一次作答（未作答为 None），
+        供前端恢复作答状态、从断点继续。
+        """
         session = self._get_session()
         questions = list(session.exec(self._scope_select(course_id, study_set_id)).all())
-        # 触发属性加载，避免 owns_session 关闭后访问 detached 属性
+        latest = self._latest_attempts(session, [q.id for q in questions])
+        result = []
         for q in questions:
-            _ = (q.id, q.options, q.answer, q.explanation)
+            attempt = latest.get(q.id)
+            # 触发属性加载，避免 owns_session 关闭后访问 detached 属性
+            _ = (q.id, q.options, q.answer, q.explanation, q.type, q.question,
+                 q.source_course_id, q.source_timestamp, q.course_id, q.study_set_id)
+            result.append((q, attempt.answer if attempt else None, attempt.correct if attempt else None))
         if self._owns_session:
             session.close()
-        return questions
+        return result
+
+    @staticmethod
+    def _latest_attempts(session: Session, question_ids: list[int]) -> dict[int, QuestionAttempt]:
+        """每题取最新一条作答记录。"""
+        if not question_ids:
+            return {}
+        attempts = session.exec(
+            select(QuestionAttempt)
+            .where(QuestionAttempt.question_id.in_(question_ids))
+            .order_by(QuestionAttempt.id)
+        ).all()
+        latest: dict[int, QuestionAttempt] = {}
+        for a in attempts:
+            latest[a.question_id] = a
+        return latest
 
     # ----- 判分 -----
 
@@ -234,18 +258,7 @@ class QuizService:
             if self._owns_session:
                 session.close()
             return []
-        qids = [q.id for q in questions]
-        attempts = list(
-            session.exec(
-                select(QuestionAttempt)
-                .where(QuestionAttempt.question_id.in_(qids))
-                .order_by(QuestionAttempt.id)
-            ).all()
-        )
-        # 每题取最新一条作答
-        latest: dict[int, QuestionAttempt] = {}
-        for a in attempts:
-            latest[a.question_id] = a
+        latest = self._latest_attempts(session, [q.id for q in questions])
         wrong = [q for q in questions if latest.get(q.id) is not None and not latest[q.id].correct]
         for q in wrong:
             _ = (q.id, q.type, q.question, q.options, q.answer, q.explanation,

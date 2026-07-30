@@ -141,8 +141,13 @@ function QuestionCard({
   onSeek?: (timestamp: number, courseId?: number) => void
 }) {
   const submitMutation = useSubmitQuizAnswer()
-  const [selected, setSelected] = useState<string | null>(null)
-  const [result, setResult] = useState<{ correct: boolean; answer: string; explanation: string | null } | null>(null)
+  // 用服务端返回的最近作答进度初始化：切 Tab / 刷新后恢复作答状态，从断点继续
+  const [selected, setSelected] = useState<string | null>(question.last_answer ?? null)
+  const [result, setResult] = useState<{ correct: boolean; answer: string; explanation: string | null } | null>(
+    question.last_answer != null && question.last_correct != null
+      ? { correct: question.last_correct, answer: question.answer, explanation: question.explanation }
+      : null,
+  )
 
   const answered = result !== null
 

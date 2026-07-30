@@ -17,7 +17,7 @@ from backend.services.quiz_service import QuizService
 router = APIRouter()
 
 
-def _to_detail(q) -> QuestionDetail:
+def _to_detail(q, last_answer=None, last_correct=None) -> QuestionDetail:
     options = json.loads(q.options) if q.options else None
     return QuestionDetail(
         id=q.id,
@@ -28,6 +28,8 @@ def _to_detail(q) -> QuestionDetail:
         explanation=q.explanation,
         source_course_id=q.source_course_id,
         source_timestamp=q.source_timestamp,
+        last_answer=last_answer,
+        last_correct=last_correct,
     )
 
 
@@ -50,11 +52,11 @@ def generate_quiz(payload: QuizGenerateRequest):
 
 @router.get("", response_model=list[QuestionDetail])
 def list_quiz(course_id: int | None = None, study_set_id: int | None = None):
-    """列出某范围的全部题。"""
+    """列出某范围的全部题，附带每题最近一次作答进度（断点续答）。"""
     if course_id is None and study_set_id is None:
         raise HTTPException(status_code=400, detail="需提供 course_id 或 study_set_id")
     service = QuizService()
-    return [_to_detail(q) for q in service.list_questions(course_id, study_set_id)]
+    return [_to_detail(q, last_answer, last_correct) for q, last_answer, last_correct in service.list_questions(course_id, study_set_id)]
 
 
 @router.get("/wrong", response_model=list[QuestionDetail])

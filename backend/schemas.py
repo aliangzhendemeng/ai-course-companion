@@ -98,10 +98,12 @@ class QuestionItem(BaseModel):
 
 
 class QuestionDetail(QuestionItem):
-    """含答案与解析（判分后 / 列表展示用）。"""
+    """含答案与解析（判分后 / 列表展示用），并附带最近一次作答进度。"""
 
     answer: str
     explanation: str | None = None
+    last_answer: str | None = None  # 最近一次作答（未作答为 None），供断点续答
+    last_correct: bool | None = None  # 最近一次作答是否正确
 
 
 class QuizGenerateRequest(BaseModel):

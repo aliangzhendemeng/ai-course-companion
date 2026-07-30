@@ -266,6 +266,9 @@ export interface Question {
   explanation: string | null
   source_course_id: number | null
   source_timestamp: number | null
+  /** 最近一次作答进度（断点续答）；未作答为 null */
+  last_answer?: string | null
+  last_correct?: boolean | null
 }
 
 export interface QuizGenerateResponse {

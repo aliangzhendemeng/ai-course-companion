@@ -198,3 +198,32 @@ class TestWrongBook:
             from backend.models import QuestionAttempt
             remaining = list(session.exec(select(QuestionAttempt)).all())
         assert remaining == []
+
+
+class TestProgressResume:
+    def test_list_questions_attaches_latest_attempt(self, quiz_service, db_engine, sample_course):
+        """已答题附带最近作答，未答题为 None，供前端断点续答。"""
+        service = quiz_service()
+        service.generate(course_id=sample_course, count=2)
+        questions = _questions(db_engine)
+        choice = [q for q in questions if q.type == "choice"][0]
+        judge = [q for q in questions if q.type == "judge"][0]
+
+        service.submit_answer(choice.id, "B")  # 答错
+
+        listed = {q.id: (la, lc) for q, la, lc in service.list_questions(course_id=sample_course)}
+        assert listed[choice.id] == ("B", False)
+        # 未答的题没有进度
+        assert listed[judge.id] == (None, None)
+
+    def test_progress_reflects_latest_attempt(self, quiz_service, db_engine, sample_course):
+        """多次作答，进度反映最近一次（重答答对后 last_correct=True）。"""
+        service = quiz_service()
+        service.generate(course_id=sample_course, count=2)
+        choice = [q for q in _questions(db_engine) if q.type == "choice"][0]
+
+        service.submit_answer(choice.id, "B")  # 先错
+        service.submit_answer(choice.id, "A")  # 再对
+
+        listed = {q.id: (la, lc) for q, la, lc in service.list_questions(course_id=sample_course)}
+        assert listed[choice.id] == ("A", True)
