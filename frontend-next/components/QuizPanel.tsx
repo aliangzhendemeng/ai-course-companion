@@ -118,7 +118,7 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
           <TabsContent value="wrong" className="mt-3 data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:gap-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                历史答错记录，答对后会标记"已掌握"但保留。
+                历史答错记录，可重做；答对后标"已掌握"但保留。
               </p>
               {wrong.length > 0 && (
                 <Button
@@ -141,7 +141,7 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
               <ScrollArea className="max-h-[60vh]">
                 <ol className="space-y-4 pr-3">
                   {wrong.map((q, idx) => (
-                    <WrongQuestionCard key={q.id} index={idx + 1} question={q} onSeek={onSeek} />
+                    <WrongQuestionCard key={q.id} index={idx + 1} question={q} scope={scope} onSeek={onSeek} />
                   ))}
                 </ol>
               </ScrollArea>
@@ -299,16 +299,39 @@ function QuestionCard({
   )
 }
 
-/** 错题本条目（只读复习）：高亮正确答案、显示已掌握/答错次数、解析、来源。 */
+/** 错题本条目：可重做（未掌握默认遮答案可作答），已掌握默认收起答案可展开复习。 */
 function WrongQuestionCard({
   index,
   question,
+  scope,
   onSeek,
 }: {
   index: number
   question: WrongQuestion
+  scope: QuizScope
   onSeek?: (timestamp: number, courseId?: number) => void
 }) {
+  const submitMutation = useSubmitQuizAnswer()
+  // 已掌握的默认收起答案；未掌握的进入待作答状态
+  const [revealed, setRevealed] = useState(false)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [result, setResult] = useState<{ correct: boolean; answer: string } | null>(null)
+
+  // 重做答对后视为已掌握（服务端 mastered 会翻转，本地也即时反映）
+  const mastered = question.mastered || (result?.correct ?? false)
+  const answered = result !== null
+  // 是否展开显示答案与解析：已掌握且点了"查看答案"，或本轮已作答
+  const showAnswer = (mastered && revealed) || answered
+
+  const handleSubmit = (value: string) => {
+    if (answered || submitMutation.isPending) return
+    setSelected(value)
+    submitMutation.mutate(
+      { questionId: question.id, answer: value, scope },
+      { onSuccess: (data) => setResult({ correct: data.correct, answer: data.answer }) },
+    )
+  }
+
   return (
     <li className="rounded-xl border bg-card p-4 shadow-sm">
       <div className="mb-3 flex items-start gap-2">
@@ -320,7 +343,7 @@ function WrongQuestionCard({
           <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
             {question.type === "choice" ? "单选" : "判断"}
           </span>
-          {question.mastered ? (
+          {mastered ? (
             <span className="rounded-full bg-green-100 px-2 py-0.5 text-[10px] font-medium text-green-700 dark:bg-green-950/50 dark:text-green-400">
               ✓ 已掌握
             </span>
@@ -332,38 +355,105 @@ function WrongQuestionCard({
         </div>
       </div>
 
+      {/* 选项区：未作答且未掌握时可点答；否则按需展示答案 */}
       {question.type === "choice" && question.options ? (
         <div className="space-y-1.5">
           {question.options.map((opt, i) => {
             const letter = String.fromCharCode(65 + i)
-            const isCorrect = question.answer === letter
+            const isCorrectAnswer = question.answer === letter
+            const isSelected = selected === letter
+            const isWrongPick = answered && isSelected && !result?.correct
+            const canAnswer = !mastered && !answered
             return (
-              <div
+              <button
                 key={i}
+                onClick={() => canAnswer && handleSubmit(letter)}
+                disabled={!canAnswer || submitMutation.isPending}
                 className={[
-                  "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm",
-                  isCorrect
+                  "flex w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-sm transition-colors",
+                  showAnswer && isCorrectAnswer
                     ? "border-green-500 bg-green-50 text-green-900 dark:bg-green-950/40 dark:text-green-100"
-                    : "text-muted-foreground",
+                    : isWrongPick
+                      ? "border-red-500 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-100"
+                      : canAnswer
+                        ? "hover:bg-accent"
+                        : "text-muted-foreground",
                 ].join(" ")}
               >
                 <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full border text-[10px]">
                   {letter}
                 </span>
                 <span className="flex-1">{opt}</span>
-                {isCorrect && <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />}
-              </div>
+                {showAnswer && isCorrectAnswer && <CheckCircle2 className="h-4 w-4 shrink-0 text-green-600" />}
+                {isWrongPick && <XCircle className="h-4 w-4 shrink-0 text-red-600" />}
+              </button>
             )
           })}
         </div>
       ) : (
-        <p className="text-sm">
-          正确答案：
-          <span className="font-medium text-green-700 dark:text-green-400">{question.answer}</span>
+        // 判断题
+        <div className="flex gap-2">
+          {["正确", "错误"].map((val) => {
+            const isCorrectAnswer = question.answer === val
+            const isSelected = selected === val
+            const isWrongPick = answered && isSelected && !result?.correct
+            const canAnswer = !mastered && !answered
+            return (
+              <button
+                key={val}
+                onClick={() => canAnswer && handleSubmit(val)}
+                disabled={!canAnswer || submitMutation.isPending}
+                className={[
+                  "flex flex-1 items-center justify-center gap-2 rounded-lg border px-3 py-1.5 text-sm transition-colors",
+                  showAnswer && isCorrectAnswer
+                    ? "border-green-500 bg-green-50 text-green-900 dark:bg-green-950/40 dark:text-green-100"
+                    : isWrongPick
+                      ? "border-red-500 bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-100"
+                      : canAnswer
+                        ? "hover:bg-accent"
+                        : "text-muted-foreground",
+                ].join(" ")}
+              >
+                {val}
+                {showAnswer && isCorrectAnswer && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+                {isWrongPick && <XCircle className="h-4 w-4 text-red-600" />}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {submitMutation.isPending && (
+        <p className="mt-2 flex items-center text-xs text-muted-foreground">
+          <Loader2 className="mr-1 h-3 w-3 animate-spin" /> 判分中…
         </p>
       )}
 
-      {question.explanation && (
+      {/* 作答反馈 */}
+      {answered && (
+        <p
+          className={[
+            "mt-3 rounded-lg px-3 py-2 text-xs font-medium",
+            result?.correct
+              ? "bg-green-50 text-green-900 dark:bg-green-950/40 dark:text-green-100"
+              : "bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-100",
+          ].join(" ")}
+        >
+          {result?.correct ? "✓ 回答正确，已标记为掌握" : `✗ 仍答错，正确答案：${result?.answer}`}
+        </p>
+      )}
+
+      {/* 查看答案（已掌握且未展开时） */}
+      {mastered && !showAnswer && (
+        <button
+          onClick={() => setRevealed(true)}
+          className="mt-3 text-xs text-accent hover:underline"
+        >
+          查看答案
+        </button>
+      )}
+
+      {showAnswer && question.explanation && (
         <p className="mt-3 rounded-lg bg-muted px-3 py-2 text-xs leading-relaxed text-muted-foreground">
           {question.explanation}
         </p>
