@@ -140,6 +140,16 @@ class Question(SQLModel, table=True):
     created_at: datetime = Field(default_factory=_utcnow)
 
 
+class QuestionAttempt(SQLModel, table=True):
+    """作答记录：每次作答一行，用于错题本（最近一次答错即为错题）。"""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    question_id: int = Field(foreign_key="question.id", index=True)
+    answer: str  # 用户作答
+    correct: bool = Field(index=True)
+    created_at: datetime = Field(default_factory=_utcnow)
+
+
 class Flashcard(SQLModel, table=True):
     """闪卡：从课程内容生成的正/反面记忆卡。"""
 

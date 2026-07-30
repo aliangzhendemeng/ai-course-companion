@@ -9,7 +9,7 @@ from backend.ai import quiz_generator
 from backend.ai.llm.base import BaseLLM
 from backend.ai.rag_engine import RAGEngine, format_timestamp
 from backend.database import engine
-from backend.models import Course, Frame, Question, Transcript
+from backend.models import Course, Frame, Question, QuestionAttempt, Transcript
 from backend.services.study_set_service import StudySetService
 
 logger = logging.getLogger(__name__)
@@ -201,9 +201,9 @@ class QuizService:
     # ----- 判分 -----
 
     def submit_answer(self, question_id: int, answer: str) -> Question:
-        """判分：比对预设答案，返回该题（前端读 correct/answer/explanation）。
+        """判分并记录作答：比对预设答案，写入 QuestionAttempt，返回该题。
 
-        选择/判断纯后端比对，不调 LLM。
+        选择/判断纯后端比对，不调 LLM。作答记录供错题本使用。
         """
         session = self._get_session()
         question = session.get(Question, question_id)
@@ -211,12 +211,48 @@ class QuizService:
             if self._owns_session:
                 session.close()
             raise ValueError(f"题目不存在: {question_id}")
+        correct = self.is_correct(question, answer)
+        session.add(QuestionAttempt(question_id=question_id, answer=(answer or "").strip(), correct=correct))
+        session.commit()
         _ = (question.id, question.type, question.question, question.options,
              question.answer, question.explanation, question.source_course_id,
-             question.source_timestamp)
+             question.source_timestamp, question.course_id, question.study_set_id)
         if self._owns_session:
             session.close()
         return question
+
+    def get_wrong_questions(
+        self, course_id: int | None = None, study_set_id: int | None = None
+    ) -> list[Question]:
+        """错题本：某范围内最近一次作答为错的题。
+
+        以每题最新一条 QuestionAttempt 为准；重新答对后自动移出。未作答过的题不计入。
+        """
+        session = self._get_session()
+        questions = list(session.exec(self._scope_select(course_id, study_set_id)).all())
+        if not questions:
+            if self._owns_session:
+                session.close()
+            return []
+        qids = [q.id for q in questions]
+        attempts = list(
+            session.exec(
+                select(QuestionAttempt)
+                .where(QuestionAttempt.question_id.in_(qids))
+                .order_by(QuestionAttempt.id)
+            ).all()
+        )
+        # 每题取最新一条作答
+        latest: dict[int, QuestionAttempt] = {}
+        for a in attempts:
+            latest[a.question_id] = a
+        wrong = [q for q in questions if latest.get(q.id) is not None and not latest[q.id].correct]
+        for q in wrong:
+            _ = (q.id, q.type, q.question, q.options, q.answer, q.explanation,
+                 q.source_course_id, q.source_timestamp, q.course_id, q.study_set_id)
+        if self._owns_session:
+            session.close()
+        return wrong
 
     @staticmethod
     def is_correct(question: Question, answer: str) -> bool:
@@ -233,9 +269,13 @@ class QuizService:
     # ----- 清空 -----
 
     def clear(self, course_id: int | None = None, study_set_id: int | None = None) -> int:
-        """清空某范围的全部题，返回删除数。"""
+        """清空某范围的全部题及其作答记录，返回删除题数。"""
         session = self._get_session()
         questions = session.exec(self._scope_select(course_id, study_set_id)).all()
+        qids = [q.id for q in questions]
+        if qids:
+            for a in session.exec(select(QuestionAttempt).where(QuestionAttempt.question_id.in_(qids))).all():
+                session.delete(a)
         n = 0
         for q in questions:
             session.delete(q)

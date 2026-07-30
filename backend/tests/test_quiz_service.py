@@ -154,3 +154,47 @@ class TestClear:
         n = service.clear(course_id=sample_course)
         assert n == 2
         assert _questions(db_engine) == []
+
+
+class TestWrongBook:
+    def test_submit_records_attempt_and_wrong_listed(self, quiz_service, db_engine, sample_course):
+        service = quiz_service()
+        service.generate(course_id=sample_course, count=2)
+        questions = _questions(db_engine)
+        choice = [q for q in questions if q.type == "choice"][0]
+        judge = [q for q in questions if q.type == "judge"][0]
+
+        # 选择题答错，判断题答对
+        service.submit_answer(choice.id, "B")  # 正确是 A
+        service.submit_answer(judge.id, "正确")
+
+        wrong = service.get_wrong_questions(course_id=sample_course)
+        assert [q.id for q in wrong] == [choice.id]
+
+    def test_correct_after_wrong_removes_from_wrong_book(self, quiz_service, db_engine, sample_course):
+        service = quiz_service()
+        service.generate(course_id=sample_course, count=2)
+        choice = [q for q in _questions(db_engine) if q.type == "choice"][0]
+
+        service.submit_answer(choice.id, "B")  # 先答错
+        assert len(service.get_wrong_questions(course_id=sample_course)) == 1
+
+        service.submit_answer(choice.id, "A")  # 再答对
+        assert service.get_wrong_questions(course_id=sample_course) == []
+
+    def test_unanswered_not_in_wrong_book(self, quiz_service, db_engine, sample_course):
+        service = quiz_service()
+        service.generate(course_id=sample_course, count=2)
+        assert service.get_wrong_questions(course_id=sample_course) == []
+
+    def test_clear_removes_attempts(self, quiz_service, db_engine, sample_course):
+        service = quiz_service()
+        service.generate(course_id=sample_course, count=2)
+        choice = [q for q in _questions(db_engine) if q.type == "choice"][0]
+        service.submit_answer(choice.id, "B")
+
+        service.clear(course_id=sample_course)
+        with Session(db_engine) as session:
+            from backend.models import QuestionAttempt
+            remaining = list(session.exec(select(QuestionAttempt)).all())
+        assert remaining == []

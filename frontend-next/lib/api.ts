@@ -307,6 +307,10 @@ export async function listQuiz(scope: QuizScope): Promise<Question[]> {
   return request<Question[]>(`/api/quiz?${scopeQuery(scope)}`)
 }
 
+export async function listWrongQuiz(scope: QuizScope): Promise<Question[]> {
+  return request<Question[]>(`/api/quiz/wrong?${scopeQuery(scope)}`)
+}
+
 export async function submitQuizAnswer(questionId: number, answer: string): Promise<QuizAnswerResponse> {
   return request<QuizAnswerResponse>(`/api/quiz/${questionId}/answer`, {
     method: "POST",

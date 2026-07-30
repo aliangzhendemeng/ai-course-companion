@@ -57,6 +57,15 @@ def list_quiz(course_id: int | None = None, study_set_id: int | None = None):
     return [_to_detail(q) for q in service.list_questions(course_id, study_set_id)]
 
 
+@router.get("/wrong", response_model=list[QuestionDetail])
+def list_wrong(course_id: int | None = None, study_set_id: int | None = None):
+    """错题本：某范围内最近一次作答为错的题。"""
+    if course_id is None and study_set_id is None:
+        raise HTTPException(status_code=400, detail="需提供 course_id 或 study_set_id")
+    service = QuizService()
+    return [_to_detail(q) for q in service.get_wrong_questions(course_id, study_set_id)]
+
+
 @router.post("/{question_id}/answer", response_model=QuizAnswerResponse)
 def submit_answer(question_id: int, payload: QuizAnswerRequest):
     """作答判分。"""

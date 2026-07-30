@@ -30,6 +30,7 @@ import {
   deleteStudySet,
   generateQuiz,
   listQuiz,
+  listWrongQuiz,
   submitQuizAnswer,
   clearQuiz,
   generateFlashcards,
@@ -192,6 +193,14 @@ export function useQuiz(scope: QuizScope, options?: Partial<UseQueryOptions<Ques
   })
 }
 
+export function useWrongQuiz(scope: QuizScope, options?: Partial<UseQueryOptions<Question[], Error>>) {
+  return useQuery<Question[], Error>({
+    queryKey: [...quizKey(scope), "wrong"],
+    queryFn: () => listWrongQuiz(scope),
+    ...options,
+  })
+}
+
 export function useGenerateQuiz() {
   const queryClient = useQueryClient()
   return useMutation<QuizGenerateResponse, Error, { scope: QuizScope; count?: number }>({
@@ -203,8 +212,15 @@ export function useGenerateQuiz() {
 }
 
 export function useSubmitQuizAnswer() {
-  return useMutation<QuizAnswerResponse, Error, { questionId: number; answer: string }>({
+  const queryClient = useQueryClient()
+  return useMutation<QuizAnswerResponse, Error, { questionId: number; answer: string; scope?: QuizScope }>({
     mutationFn: ({ questionId, answer }) => submitQuizAnswer(questionId, answer),
+    onSuccess: (_, variables) => {
+      if (variables.scope) {
+        // 作答影响错题本，刷新它
+        queryClient.invalidateQueries({ queryKey: [...quizKey(variables.scope), "wrong"] })
+      }
+    },
   })
 }
 

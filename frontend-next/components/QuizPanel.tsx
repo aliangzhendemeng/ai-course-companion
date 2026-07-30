@@ -1,16 +1,18 @@
 "use client"
 
 import { useState } from "react"
-import { CheckCircle2, Loader2, PlayCircle, RefreshCw, Sparkles, Trash2, XCircle } from "lucide-react"
+import { BookX, CheckCircle2, Loader2, PlayCircle, RefreshCw, Sparkles, Trash2, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   useClearQuiz,
   useGenerateQuiz,
   useQuiz,
   useSubmitQuizAnswer,
+  useWrongQuiz,
 } from "@/hooks/use-api"
 import { formatTimestamp } from "@/lib/timestamp"
 import type { Question, QuizScope } from "@/lib/api"
@@ -20,9 +22,10 @@ interface QuizPanelProps {
   onSeek?: (timestamp: number, courseId?: number) => void
 }
 
-/** 测验面板：生成、作答、判分、解析、来源跳转。 */
+/** 测验面板：生成、作答、判分、解析、来源跳转、错题本。 */
 export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
   const { data: questions, isLoading } = useQuiz(scope)
+  const { data: wrongQuestions } = useWrongQuiz(scope)
   const generateMutation = useGenerateQuiz()
   const clearMutation = useClearQuiz()
 
@@ -39,6 +42,7 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
   }
 
   const list = questions ?? []
+  const wrong = wrongQuestions ?? []
   const busy = generateMutation.isPending || clearMutation.isPending
 
   return (
@@ -84,13 +88,42 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
           点击"生成测验"，AI 会根据课程内容出选择题和判断题
         </div>
       ) : (
-        <ScrollArea className="flex-1">
-          <ol className="space-y-4 pr-3">
-            {list.map((q, idx) => (
-              <QuestionCard key={q.id} index={idx + 1} question={q} onSeek={onSeek} />
-            ))}
-          </ol>
-        </ScrollArea>
+        <Tabs defaultValue="all" className="flex min-h-0 flex-1 flex-col">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="all">题目（{list.length}）</TabsTrigger>
+            <TabsTrigger value="wrong" className="gap-1">
+              <BookX className="h-3.5 w-3.5" />
+              错题本（{wrong.length}）
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="all" className="mt-3 min-h-0 flex-1">
+            <ScrollArea className="h-full">
+              <ol className="space-y-4 pr-3">
+                {list.map((q, idx) => (
+                  <QuestionCard key={q.id} index={idx + 1} question={q} scope={scope} onSeek={onSeek} />
+                ))}
+              </ol>
+            </ScrollArea>
+          </TabsContent>
+          <TabsContent value="wrong" className="mt-3 min-h-0 flex-1">
+            {wrong.length === 0 ? (
+              <div className="flex h-full items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+                太棒了，没有错题！🎉
+              </div>
+            ) : (
+              <ScrollArea className="h-full">
+                <p className="mb-3 text-xs text-muted-foreground">
+                  答错的题会出现在这里，重新答对后自动移出。
+                </p>
+                <ol className="space-y-4 pr-3">
+                  {wrong.map((q, idx) => (
+                    <QuestionCard key={q.id} index={idx + 1} question={q} scope={scope} onSeek={onSeek} />
+                  ))}
+                </ol>
+              </ScrollArea>
+            )}
+          </TabsContent>
+        </Tabs>
       )}
     </div>
   )
@@ -99,10 +132,12 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
 function QuestionCard({
   index,
   question,
+  scope,
   onSeek,
 }: {
   index: number
   question: Question
+  scope: QuizScope
   onSeek?: (timestamp: number, courseId?: number) => void
 }) {
   const submitMutation = useSubmitQuizAnswer()
@@ -115,7 +150,7 @@ function QuestionCard({
     if (answered || submitMutation.isPending) return
     setSelected(value)
     submitMutation.mutate(
-      { questionId: question.id, answer: value },
+      { questionId: question.id, answer: value, scope },
       {
         onSuccess: (data) => {
           setResult({ correct: data.correct, answer: data.answer, explanation: data.explanation })
