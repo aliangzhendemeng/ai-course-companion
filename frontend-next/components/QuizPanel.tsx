@@ -108,7 +108,15 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
               <ScrollArea className="min-h-0 flex-1">
                 <ol className="space-y-4 pr-3">
                   {list.map((q, idx) => (
-                    <QuestionCard key={q.id} index={idx + 1} question={q} scope={scope} onSeek={onSeek} />
+                    // key 含服务端作答进度：切 Tab 重新拉取后，进度变化会重置卡片状态，
+                    // 保证已答/未答永远与服务端一致（断点续答）
+                    <QuestionCard
+                      key={`${q.id}:${q.last_answer ?? ""}:${q.last_correct ?? ""}`}
+                      index={idx + 1}
+                      question={q}
+                      scope={scope}
+                      onSeek={onSeek}
+                    />
                   ))}
                 </ol>
               </ScrollArea>
@@ -141,7 +149,14 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
               <ScrollArea className="max-h-[60vh]">
                 <ol className="space-y-4 pr-3">
                   {wrong.map((q, idx) => (
-                    <WrongQuestionCard key={q.id} index={idx + 1} question={q} scope={scope} onSeek={onSeek} />
+                    // key 含 streak/mastered：重做推进进度后重置卡片状态，与服务端一致
+                    <WrongQuestionCard
+                      key={`${q.id}:${q.streak}:${q.mastered}`}
+                      index={idx + 1}
+                      question={q}
+                      scope={scope}
+                      onSeek={onSeek}
+                    />
                   ))}
                 </ol>
               </ScrollArea>
