@@ -34,7 +34,7 @@ def _to_detail(q, last_answer=None, last_correct=None) -> QuestionDetail:
     )
 
 
-def _to_wrong(q, mastered: bool, wrong_count: int) -> WrongQuestionItem:
+def _to_wrong(q, mastered: bool, wrong_count: int, streak: int, master_streak: int) -> WrongQuestionItem:
     options = json.loads(q.options) if q.options else None
     return WrongQuestionItem(
         id=q.id,
@@ -47,6 +47,8 @@ def _to_wrong(q, mastered: bool, wrong_count: int) -> WrongQuestionItem:
         source_timestamp=q.source_timestamp,
         mastered=mastered,
         wrong_count=wrong_count,
+        streak=streak,
+        master_streak=master_streak,
     )
 
 
@@ -78,11 +80,14 @@ def list_quiz(course_id: int | None = None, study_set_id: int | None = None):
 
 @router.get("/wrong", response_model=list[WrongQuestionItem])
 def list_wrong(course_id: int | None = None, study_set_id: int | None = None):
-    """错题本（历史记录）：所有曾答错的题，答对后标"已掌握"不移除。"""
+    """错题本（历史记录）：所有曾答错的题，连续答对 N 次才标"已掌握"，记录保留。"""
     if course_id is None and study_set_id is None:
         raise HTTPException(status_code=400, detail="需提供 course_id 或 study_set_id")
     service = QuizService()
-    return [_to_wrong(q, mastered, cnt) for q, mastered, cnt in service.get_wrong_questions(course_id, study_set_id)]
+    return [
+        _to_wrong(q, mastered, cnt, streak, QuizService.MASTER_STREAK)
+        for q, mastered, cnt, streak in service.get_wrong_questions(course_id, study_set_id)
+    ]
 
 
 @router.delete("/wrong")

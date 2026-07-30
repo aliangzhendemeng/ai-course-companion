@@ -283,10 +283,14 @@ export interface QuizAnswerResponse {
   explanation: string | null
 }
 
-/** 错题本条目：历史答错记录，答对后标"已掌握"不移除 */
+/** 错题本条目：历史答错记录，连续答对 N 次才标"已掌握"，记录保留 */
 export interface WrongQuestion extends Question {
   mastered: boolean
   wrong_count: number
+  /** 自最近一次答错起的连续答对数（掌握进度） */
+  streak: number
+  /** 连续答对多少次算掌握 */
+  master_streak: number
 }
 
 /** 范围参数：课程或学习集二选一 */

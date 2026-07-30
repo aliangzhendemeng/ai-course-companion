@@ -171,7 +171,7 @@ class TestClear:
         assert service.list_questions(course_id=sample_course) == []
         # 错题本仍在
         wrong = service.get_wrong_questions(course_id=sample_course)
-        assert [q.id for q, _, _ in wrong] == [choice.id]
+        assert [q.id for q, _, _, _ in wrong] == [choice.id]
 
 
 class TestWrongBook:
@@ -186,22 +186,38 @@ class TestWrongBook:
         service.submit_answer(judge.id, "正确")  # 答对
 
         wrong = service.get_wrong_questions(course_id=sample_course)
-        assert [(q.id, mastered, cnt) for q, mastered, cnt in wrong] == [(choice.id, False, 1)]
+        assert [(q.id, mastered, cnt) for q, mastered, cnt, _ in wrong] == [(choice.id, False, 1)]
 
-    def test_correct_after_wrong_marks_mastered_but_keeps_history(self, quiz_service, db_engine, sample_course):
-        """答错后答对：错题本保留该题并标已掌握，不移除。"""
+    def test_mastered_requires_consecutive_correct(self, quiz_service, db_engine, sample_course):
+        """连续答对 MASTER_STREAK 次才算掌握；答错重置。"""
+        service = quiz_service()
+        service.generate(course_id=sample_course, count=2)
+        choice = [q for q in _questions(db_engine) if q.type == "choice"][0]
+        need = QuizService.MASTER_STREAK
+
+        service.submit_answer(choice.id, "B")  # 答错
+        # 答对 need-1 次仍未掌握
+        for _ in range(need - 1):
+            service.submit_answer(choice.id, "A")
+        wrong = service.get_wrong_questions(course_id=sample_course)
+        assert [(q.id, mastered, streak) for q, mastered, _, streak in wrong] == [(choice.id, False, need - 1)]
+
+        # 再答对 1 次（凑够连续 need 次）→ 掌握
+        service.submit_answer(choice.id, "A")
+        wrong = service.get_wrong_questions(course_id=sample_course)
+        assert [(q.id, mastered, streak) for q, mastered, _, streak in wrong] == [(choice.id, True, need)]
+
+    def test_wrong_after_progress_resets_streak(self, quiz_service, db_engine, sample_course):
+        """答对一次又答错：连续计数重置，仍未掌握（不再反复横跳为已掌握）。"""
         service = quiz_service()
         service.generate(course_id=sample_course, count=2)
         choice = [q for q in _questions(db_engine) if q.type == "choice"][0]
 
-        service.submit_answer(choice.id, "B")  # 先答错
+        service.submit_answer(choice.id, "B")  # 错
+        service.submit_answer(choice.id, "A")  # 对（streak=1）
+        service.submit_answer(choice.id, "C")  # 又错（streak 重置为 0）
         wrong = service.get_wrong_questions(course_id=sample_course)
-        assert [(q.id, mastered) for q, mastered, _ in wrong] == [(choice.id, False)]
-
-        service.submit_answer(choice.id, "A")  # 再答对
-        wrong = service.get_wrong_questions(course_id=sample_course)
-        # 历史保留，标已掌握
-        assert [(q.id, mastered, cnt) for q, mastered, cnt in wrong] == [(choice.id, True, 1)]
+        assert [(q.id, mastered, cnt, streak) for q, mastered, cnt, streak in wrong] == [(choice.id, False, 2, 0)]
 
     def test_wrong_count_accumulates(self, quiz_service, db_engine, sample_course):
         """同一题多次答错，wrong_count 累计。"""
@@ -211,7 +227,7 @@ class TestWrongBook:
         service.submit_answer(choice.id, "B")  # 错
         service.submit_answer(choice.id, "C")  # 又错
         wrong = service.get_wrong_questions(course_id=sample_course)
-        assert [(q.id, cnt) for q, _, cnt in wrong] == [(choice.id, 2)]
+        assert [(q.id, cnt) for q, _, cnt, _ in wrong] == [(choice.id, 2)]
 
     def test_unanswered_not_in_wrong_book(self, quiz_service, db_engine, sample_course):
         service = quiz_service()

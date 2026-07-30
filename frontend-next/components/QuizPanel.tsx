@@ -118,7 +118,7 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
           <TabsContent value="wrong" className="mt-3 data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:gap-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                历史答错记录，可重做；答对后标"已掌握"但保留。
+                历史答错记录，可重做；连续答对 {wrong[0]?.master_streak ?? 2} 次才标"已掌握"，记录保留。
               </p>
               {wrong.length > 0 && (
                 <Button
@@ -316,21 +316,28 @@ function WrongQuestionCard({
   const [revealed, setRevealed] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [result, setResult] = useState<{ correct: boolean; answer: string } | null>(null)
-
-  // 重做答对后视为已掌握（服务端 mastered 会翻转，本地也即时反映）
-  const mastered = question.mastered || (result?.correct ?? false)
-  const answered = result !== null
-  // 是否展开显示答案与解析：已掌握且点了"查看答案"，或本轮已作答
-  const showAnswer = (mastered && revealed) || answered
+  // 本地连续答对进度：基于服务端 streak，本轮答对即 +1（答错由服务端重置）
+  const [localStreak, setLocalStreak] = useState(question.streak)
 
   const handleSubmit = (value: string) => {
-    if (answered || submitMutation.isPending) return
+    if (result !== null || submitMutation.isPending) return
     setSelected(value)
     submitMutation.mutate(
       { questionId: question.id, answer: value, scope },
-      { onSuccess: (data) => setResult({ correct: data.correct, answer: data.answer }) },
+      {
+        onSuccess: (data) => {
+          setResult({ correct: data.correct, answer: data.answer })
+          if (data.correct) setLocalStreak((s) => s + 1)
+          else setLocalStreak(0)
+        },
+      },
     )
   }
+
+  const answered = result !== null
+  const mastered = localStreak >= question.master_streak
+  // 是否展开显示答案与解析：已掌握且点了"查看答案"，或本轮已作答
+  const showAnswer = (mastered && revealed) || answered
 
   return (
     <li className="rounded-xl border bg-card p-4 shadow-sm">
@@ -349,7 +356,7 @@ function WrongQuestionCard({
             </span>
           ) : (
             <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-950/50 dark:text-red-400">
-              错 {question.wrong_count} 次
+              错 {question.wrong_count} 次 · 再对 {question.master_streak - localStreak} 次掌握
             </span>
           )}
         </div>
@@ -431,7 +438,7 @@ function WrongQuestionCard({
 
       {/* 作答反馈 */}
       {answered && (
-        <p
+        <div
           className={[
             "mt-3 rounded-lg px-3 py-2 text-xs font-medium",
             result?.correct
@@ -439,8 +446,22 @@ function WrongQuestionCard({
               : "bg-red-50 text-red-900 dark:bg-red-950/40 dark:text-red-100",
           ].join(" ")}
         >
-          {result?.correct ? "✓ 回答正确，已标记为掌握" : `✗ 仍答错，正确答案：${result?.answer}`}
-        </p>
+          <p>
+            {result?.correct
+              ? mastered
+                ? "✓ 回答正确，已标记为掌握"
+                : `✓ 回答正确，再连续答对 ${question.master_streak - localStreak} 次即掌握`
+              : `✗ 仍答错，正确答案：${result?.answer}`}
+          </p>
+          {!mastered && (
+            <button
+              onClick={() => { setResult(null); setSelected(null) }}
+              className="mt-1.5 text-accent underline underline-offset-2 hover:opacity-80"
+            >
+              再答一次
+            </button>
+          )}
+        </div>
       )}
 
       {/* 查看答案（已掌握且未展开时） */}

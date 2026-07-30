@@ -129,10 +129,12 @@ class QuizAnswerResponse(BaseModel):
 
 
 class WrongQuestionItem(QuestionDetail):
-    """错题本条目：历史答错记录，答对后标"已掌握"但不移除。"""
+    """错题本条目：历史答错记录，连续答对 N 次才标"已掌握"，记录保留。"""
 
-    mastered: bool  # 当前题库批次最近一次作答是否答对
+    mastered: bool  # 是否已掌握（自最近答错起连续答对 master_streak 次）
     wrong_count: int  # 历史答错次数
+    streak: int  # 自最近一次答错起的连续答对数（掌握进度）
+    master_streak: int  # 达到多少连续答对算掌握
 
 
 # ===== 闪卡（Flashcard）=====

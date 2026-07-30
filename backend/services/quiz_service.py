@@ -258,16 +258,21 @@ class QuizService:
             session.close()
         return question
 
+    # 连续答对这么多次（自最近一次答错起）才算"已掌握"
+    MASTER_STREAK = 2
+
     def get_wrong_questions(
         self, course_id: int | None = None, study_set_id: int | None = None
-    ) -> list[tuple[Question, bool, int]]:
+    ) -> list[tuple[Question, bool, int, int]]:
         """错题本（历史记录）：某范围内所有曾答错的题。
 
-        返回每项 (question, mastered, wrong_count)：
-        - mastered：该题当前批次最近一次作答是否答对（答对后不移除，标"已掌握"）
+        返回每项 (question, mastered, wrong_count, streak)：
+        - mastered：自最近一次答错起，连续答对 MASTER_STREAK 次才算真正掌握
+          （答对一次又答错会重新计数，避免"到底掌没掌握"反复横跳）
         - wrong_count：该题历史答错次数
+        - streak：自最近一次答错起的连续答对数（掌握的进度）
         基于历史作答，与题目是否被"清空题目"无关 —— 清空题目不影响错题本。
-        按最近一次作答时间倒序（最新错的在前）。
+        按最近一次答错时间倒序（最新错的在前）。
         """
         session = self._get_session()
         questions = list(session.exec(self._scope_select(course_id, study_set_id)).all())
@@ -284,38 +289,38 @@ class QuizService:
             ).all()
         )
 
-        wrong_count: dict[int, int] = {}
-        last_wrong_id: dict[int, int] = {}  # qid -> 最后一次答错的 attempt id
-        # 每题当前批次（generated_at）的最近一次作答对错
-        current_attempts = [a for a in attempts if a.question_generated_at is not None]
-        max_gen: dict[int, datetime] = {}
-        for a in current_attempts:
-            g = a.question_generated_at
-            if a.question_id not in max_gen or g > max_gen[a.question_id]:
-                max_gen[a.question_id] = g
-        current_latest: dict[int, QuestionAttempt] = {}
-        for a in current_attempts:
-            if a.question_generated_at == max_gen.get(a.question_id):
-                current_latest[a.question_id] = a  # attempts 按 id 升序，覆盖即取最新
-
+        # 按题分组作答（保持升序）
+        by_q: dict[int, list[QuestionAttempt]] = {}
         for a in attempts:
-            if not a.correct:
-                wrong_count[a.question_id] = wrong_count.get(a.question_id, 0) + 1
-                last_wrong_id[a.question_id] = a.id
+            by_q.setdefault(a.question_id, []).append(a)
+
+        wrong_count: dict[int, int] = {}
+        last_wrong_id: dict[int, int] = {}
+        streak: dict[int, int] = {}  # 自最近一次答错起的连续答对数
+        for qid, rows in by_q.items():
+            s = 0
+            for a in rows:
+                if a.correct:
+                    s += 1
+                else:
+                    wrong_count[qid] = wrong_count.get(qid, 0) + 1
+                    last_wrong_id[qid] = a.id
+                    s = 0  # 答错重置连续答对
+            streak[qid] = s
 
         result = []
         for qid, cnt in wrong_count.items():
             q = by_id[qid]
-            latest = current_latest.get(qid)
-            mastered = bool(latest and latest.correct)
+            s = streak.get(qid, 0)
+            mastered = s >= self.MASTER_STREAK
             _ = (q.id, q.type, q.question, q.options, q.answer, q.explanation,
                  q.source_course_id, q.source_timestamp, q.course_id, q.study_set_id)
-            result.append((q, mastered, cnt, last_wrong_id[qid]))
+            result.append((q, mastered, cnt, s, last_wrong_id[qid]))
         # 按最近一次答错时间倒序
-        result.sort(key=lambda t: t[3], reverse=True)
+        result.sort(key=lambda t: t[4], reverse=True)
         if self._owns_session:
             session.close()
-        return [(q, mastered, cnt) for q, mastered, cnt, _ in result]
+        return [(q, mastered, cnt, s) for q, mastered, cnt, s, _ in result]
 
     @staticmethod
     def is_correct(question: Question, answer: str) -> bool:
