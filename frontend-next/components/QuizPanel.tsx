@@ -16,6 +16,7 @@ import {
   useWrongQuiz,
 } from "@/hooks/use-api"
 import { formatTimestamp } from "@/lib/timestamp"
+import { useCompanion } from "@/components/companion/CompanionContext"
 import type { Question, QuizScope, WrongQuestion } from "@/lib/api"
 
 interface QuizPanelProps {
@@ -180,6 +181,7 @@ function QuestionCard({
   onSeek?: (timestamp: number, courseId?: number) => void
 }) {
   const submitMutation = useSubmitQuizAnswer()
+  const { react } = useCompanion()
   // 用服务端返回的最近作答进度初始化：切 Tab / 刷新后恢复作答状态，从断点继续
   const [selected, setSelected] = useState<string | null>(question.last_answer ?? null)
   const [result, setResult] = useState<{ correct: boolean; answer: string; explanation: string | null } | null>(
@@ -198,6 +200,8 @@ function QuestionCard({
       {
         onSuccess: (data) => {
           setResult({ correct: data.correct, answer: data.answer, explanation: data.explanation })
+          // 学伴联动：答对开心夸奖，答错歪头鼓励
+          react(data.correct ? "happy" : "confused", data.correct ? "correct" : "wrong")
         },
       },
     )
@@ -327,6 +331,7 @@ function WrongQuestionCard({
   onSeek?: (timestamp: number, courseId?: number) => void
 }) {
   const submitMutation = useSubmitQuizAnswer()
+  const { react } = useCompanion()
   // 已掌握的默认收起答案；未掌握的进入待作答状态
   const [revealed, setRevealed] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
@@ -342,8 +347,15 @@ function WrongQuestionCard({
       {
         onSuccess: (data) => {
           setResult({ correct: data.correct, answer: data.answer })
-          if (data.correct) setLocalStreak((s) => s + 1)
-          else setLocalStreak(0)
+          if (data.correct) {
+            setLocalStreak((s) => s + 1)
+            // 掌握时庆祝，否则普通答对
+            const nowMastered = localStreak + 1 >= question.master_streak
+            react(nowMastered ? "celebrate" : "happy", nowMastered ? "celebrate" : "correct")
+          } else {
+            setLocalStreak(0)
+            react("confused", "wrong")
+          }
         },
       },
     )

@@ -39,6 +39,7 @@ import {
   getFlashcardStats,
   setFlashcardFamiliarity,
   clearFlashcards,
+  listCharacters,
   type Course,
   type CourseDetail,
   type Summary,
@@ -61,6 +62,7 @@ import {
   type FlashcardGenerateResponse,
   type FlashcardStats,
   type Familiarity,
+  type Character,
 } from "@/lib/api"
 
 export function useCourses(options?: Partial<UseQueryOptions<Course[], Error>>) {
@@ -297,6 +299,17 @@ export function useClearFlashcards() {
     onSuccess: (_, scope) => {
       queryClient.invalidateQueries({ queryKey: flashcardKey(scope) })
     },
+  })
+}
+
+// ---- 学伴角色 ----
+
+export function useCharacters(options?: Partial<UseQueryOptions<Character[], Error>>) {
+  return useQuery<Character[], Error>({
+    queryKey: ["characters"],
+    queryFn: listCharacters,
+    staleTime: 60000,
+    ...options,
   })
 }
 

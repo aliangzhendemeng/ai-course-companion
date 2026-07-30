@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useEffect, useState } from "react"
-import { Send, Loader2, BookOpen, Globe, Layers } from "lucide-react"
+import { Send, Loader2, BookOpen, Globe, Layers, Mic, MicOff } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/select"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { StudySetPicker } from "@/components/StudySetPicker"
+import { useSpeechInput } from "@/hooks/use-speech-input"
+import { useCompanion } from "@/components/companion/CompanionContext"
 import { deduplicateSources, formatTimestamp } from "@/lib/timestamp"
 import type { Source, ChatMessage, ChatScope } from "@/lib/api"
 
@@ -47,6 +49,17 @@ export function ChatPanel({
   // 学习集模式：选中的课程 id 集合
   const [setCourseIds, setSetCourseIds] = useState<number[]>([])
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // 语音输入：识别文本追加到输入框
+  const speech = useSpeechInput({
+    onResult: (text) => setInput((prev) => (prev ? prev + " " + text : text)),
+  })
+  const { react } = useCompanion()
+
+  // 语音输入 / 等待回答时，学伴显示 loading 状态
+  useEffect(() => {
+    if (speech.listening || isLoading) react("loading")
+  }, [speech.listening, isLoading, react])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -160,6 +173,18 @@ export function ChatPanel({
             }
             className="min-h-[60px] flex-1 resize-none"
           />
+          {speech.supported && (
+            <Button
+              size="icon"
+              variant={speech.listening ? "destructive" : "outline"}
+              className="h-auto shrink-0"
+              onClick={speech.toggle}
+              title={speech.listening ? "停止语音输入" : "语音输入"}
+              type="button"
+            >
+              {speech.listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </Button>
+          )}
           <Button
             size="icon"
             className="h-auto shrink-0"

@@ -396,3 +396,48 @@ export async function setFlashcardFamiliarity(flashcardId: number, familiarity: 
 export async function clearFlashcards(scope: QuizScope): Promise<void> {
   await request(`/api/flashcards?${scopeQuery(scope)}`, { method: "DELETE" })
 }
+
+// ---- 学伴角色（Companion Character）----
+
+export interface Character {
+  id: string
+  name: string
+  catchphrases: {
+    correct?: string
+    wrong?: string
+    greeting?: string
+    celebrate?: string
+  }
+  persona_prompt: string
+  voice: { provider?: string; voice_id?: string }
+  motions: string[]
+  /** 各动作槽是否有素材（前端据此降级占位） */
+  motion_assets: Record<string, boolean>
+  has_assets: boolean
+}
+
+export async function listCharacters(): Promise<Character[]> {
+  return request<Character[]>("/api/characters")
+}
+
+export async function getCharacter(id: string): Promise<Character> {
+  return request<Character>(`/api/characters/${id}`)
+}
+
+/** 角色某动作的形象素材 URL */
+export function getCharacterAssetUrl(characterId: string, motion: string): string {
+  return `${API_BASE}/api/characters/${characterId}/assets/${motion}`
+}
+
+/** TTS：文本转语音，返回音频 Blob（MP3），音色随角色 */
+export async function synthesizeSpeech(text: string, characterId?: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE}/api/characters/tts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, character_id: characterId ?? null }),
+  })
+  if (!response.ok) {
+    throw new Error(`TTS 失败: HTTP ${response.status}`)
+  }
+  return response.blob()
+}

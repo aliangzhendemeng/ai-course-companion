@@ -1,6 +1,6 @@
 "use client"
 
-import { useRef } from "react"
+import { useEffect, useRef } from "react"
 import { ArrowLeft, Loader2, Stethoscope } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
@@ -13,6 +13,7 @@ import { ChatPanel } from "@/components/ChatPanel"
 import { QuizPanel } from "@/components/QuizPanel"
 import { FlashcardPanel } from "@/components/FlashcardPanel"
 import { useCourse, useSummary, useChatHistory, useAskQuestion } from "@/hooks/use-api"
+import { useCompanion } from "@/components/companion/CompanionContext"
 
 export default function CourseDetailPage() {
   const params = useParams()
@@ -24,6 +25,13 @@ export default function CourseDetailPage() {
   const { data: summary, isLoading: summaryLoading } = useSummary(courseId)
   const { data: history, isLoading: historyLoading } = useChatHistory(courseId)
   const askMutation = useAskQuestion()
+  const { react } = useCompanion()
+
+  // 进入课程页，学伴打招呼（仅文字气泡，不语音打扰）
+  useEffect(() => {
+    react("happy", "greeting", false)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [courseId])
 
   const handleSeek = (timestamp: number, targetCourseId?: number) => {
     if (targetCourseId && targetCourseId !== courseId) {
