@@ -85,7 +85,7 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="all" className="mt-3 flex min-h-0 flex-1 flex-col gap-2">
+          <TabsContent value="all" className="mt-3 min-h-0 flex-1 data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:gap-2">
             <div className="flex justify-end">
               {list.length > 0 && (
                 <Button
@@ -115,7 +115,7 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
             )}
           </TabsContent>
 
-          <TabsContent value="wrong" className="mt-3 flex min-h-0 flex-1 flex-col gap-2">
+          <TabsContent value="wrong" className="mt-3 data-[state=active]:flex data-[state=active]:flex-col data-[state=active]:gap-2">
             <div className="flex items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
                 历史答错记录，答对后会标记"已掌握"但保留。
@@ -134,11 +134,11 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
               )}
             </div>
             {wrong.length === 0 ? (
-              <div className="flex flex-1 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
+              <div className="flex h-40 items-center justify-center rounded-xl border border-dashed text-sm text-muted-foreground">
                 还没有答错过的题 🎉
               </div>
             ) : (
-              <ScrollArea className="min-h-0 flex-1">
+              <ScrollArea className="max-h-[60vh]">
                 <ol className="space-y-4 pr-3">
                   {wrong.map((q, idx) => (
                     <WrongQuestionCard key={q.id} index={idx + 1} question={q} onSeek={onSeek} />
