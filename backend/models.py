@@ -125,6 +125,8 @@ class Question(SQLModel, table=True):
     """测验题：从课程内容生成的选择题/判断题。
 
     范围：单课程（course_id）或学习集（study_set_id）二选一。
+    cleared_at 非空表示该题已被"清空题目"软删除，不再出现在题目 Tab，
+    但其作答记录仍保留，错题本可基于历史作答展示。
     """
 
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -137,16 +139,23 @@ class Question(SQLModel, table=True):
     explanation: Optional[str] = None
     source_course_id: Optional[int] = Field(default=None, index=True)  # 来源课程（学习集时标注具体哪门课）
     source_timestamp: Optional[float] = None  # 来源时间点（秒），可跳回视频
+    generated_at: datetime = Field(default_factory=_utcnow, index=True)  # 归属哪一批生成（清空题目时的分界）
+    cleared_at: Optional[datetime] = Field(default=None, index=True)  # 软删除：被清空的时间
     created_at: datetime = Field(default_factory=_utcnow)
 
 
 class QuestionAttempt(SQLModel, table=True):
-    """作答记录：每次作答一行，用于错题本（最近一次答错即为错题）。"""
+    """作答记录：每次作答一行，是错题本历史的数据源。
+
+    错题本 = 历史作答记录（独立于题目是否被清空）：
+    某题曾答错即留记录，后续答对标"已掌握"但不移除。
+    """
 
     id: Optional[int] = Field(default=None, primary_key=True)
     question_id: int = Field(foreign_key="question.id", index=True)
     answer: str  # 用户作答
     correct: bool = Field(index=True)
+    question_generated_at: Optional[datetime] = Field(default=None, index=True)  # 作答时该题所属题库批次
     created_at: datetime = Field(default_factory=_utcnow)
 
 

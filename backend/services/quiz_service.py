@@ -1,7 +1,8 @@
-"""测验业务服务：从课程/学习集生成选择题与判断题，存库、追加、清空、判分。"""
+"""测验业务服务：从课程/学习集生成选择题与判断题，存库、追加、清空、判分、错题本。"""
 
 import json
 import logging
+from datetime import datetime, timezone
 
 from sqlmodel import Session, select
 
@@ -170,14 +171,14 @@ class QuizService:
 
     def _count(self, course_id: int | None, study_set_id: int | None) -> int:
         session = self._get_session()
-        statement = self._scope_select(course_id, study_set_id)
-        n = len(session.exec(statement).all())
+        n = len(session.exec(self._active_select(course_id, study_set_id)).all())
         if self._owns_session:
             session.close()
         return n
 
     @staticmethod
     def _scope_select(course_id: int | None, study_set_id: int | None):
+        """范围内全部题（含已清空的），供错题本/清空用。"""
         statement = select(Question)
         if course_id is not None:
             statement = statement.where(Question.course_id == course_id)
@@ -185,16 +186,21 @@ class QuizService:
             statement = statement.where(Question.study_set_id == study_set_id)
         return statement.order_by(Question.id)
 
+    @classmethod
+    def _active_select(cls, course_id: int | None, study_set_id: int | None):
+        """范围内当前题库（未被清空的题），题目 Tab 用这个。"""
+        return cls._scope_select(course_id, study_set_id).where(Question.cleared_at.is_(None))
+
     def list_questions(
         self, course_id: int | None = None, study_set_id: int | None = None
     ) -> list[tuple[Question, str | None, bool | None]]:
-        """列出某范围的全部题，每项为 (question, last_answer, last_correct)。
+        """列出当前题库的题，每项为 (question, last_answer, last_correct)。
 
         last_answer/last_correct 是该题最近一次作答（未作答为 None），
         供前端恢复作答状态、从断点继续。
         """
         session = self._get_session()
-        questions = list(session.exec(self._scope_select(course_id, study_set_id)).all())
+        questions = list(session.exec(self._active_select(course_id, study_set_id)).all())
         latest = self._latest_attempts(session, [q.id for q in questions])
         result = []
         for q in questions:
@@ -227,7 +233,7 @@ class QuizService:
     def submit_answer(self, question_id: int, answer: str) -> Question:
         """判分并记录作答：比对预设答案，写入 QuestionAttempt，返回该题。
 
-        选择/判断纯后端比对，不调 LLM。作答记录供错题本使用。
+        选择/判断纯后端比对，不调 LLM。作答记录是错题本历史的数据源。
         """
         session = self._get_session()
         question = session.get(Question, question_id)
@@ -236,7 +242,14 @@ class QuizService:
                 session.close()
             raise ValueError(f"题目不存在: {question_id}")
         correct = self.is_correct(question, answer)
-        session.add(QuestionAttempt(question_id=question_id, answer=(answer or "").strip(), correct=correct))
+        session.add(
+            QuestionAttempt(
+                question_id=question_id,
+                answer=(answer or "").strip(),
+                correct=correct,
+                question_generated_at=question.generated_at,
+            )
+        )
         session.commit()
         _ = (question.id, question.type, question.question, question.options,
              question.answer, question.explanation, question.source_course_id,
@@ -247,10 +260,14 @@ class QuizService:
 
     def get_wrong_questions(
         self, course_id: int | None = None, study_set_id: int | None = None
-    ) -> list[Question]:
-        """错题本：某范围内最近一次作答为错的题。
+    ) -> list[tuple[Question, bool, int]]:
+        """错题本（历史记录）：某范围内所有曾答错的题。
 
-        以每题最新一条 QuestionAttempt 为准；重新答对后自动移出。未作答过的题不计入。
+        返回每项 (question, mastered, wrong_count)：
+        - mastered：该题当前批次最近一次作答是否答对（答对后不移除，标"已掌握"）
+        - wrong_count：该题历史答错次数
+        基于历史作答，与题目是否被"清空题目"无关 —— 清空题目不影响错题本。
+        按最近一次作答时间倒序（最新错的在前）。
         """
         session = self._get_session()
         questions = list(session.exec(self._scope_select(course_id, study_set_id)).all())
@@ -258,14 +275,47 @@ class QuizService:
             if self._owns_session:
                 session.close()
             return []
-        latest = self._latest_attempts(session, [q.id for q in questions])
-        wrong = [q for q in questions if latest.get(q.id) is not None and not latest[q.id].correct]
-        for q in wrong:
+        by_id = {q.id: q for q in questions}
+        attempts = list(
+            session.exec(
+                select(QuestionAttempt)
+                .where(QuestionAttempt.question_id.in_(by_id.keys()))
+                .order_by(QuestionAttempt.id)
+            ).all()
+        )
+
+        wrong_count: dict[int, int] = {}
+        last_wrong_id: dict[int, int] = {}  # qid -> 最后一次答错的 attempt id
+        # 每题当前批次（generated_at）的最近一次作答对错
+        current_attempts = [a for a in attempts if a.question_generated_at is not None]
+        max_gen: dict[int, datetime] = {}
+        for a in current_attempts:
+            g = a.question_generated_at
+            if a.question_id not in max_gen or g > max_gen[a.question_id]:
+                max_gen[a.question_id] = g
+        current_latest: dict[int, QuestionAttempt] = {}
+        for a in current_attempts:
+            if a.question_generated_at == max_gen.get(a.question_id):
+                current_latest[a.question_id] = a  # attempts 按 id 升序，覆盖即取最新
+
+        for a in attempts:
+            if not a.correct:
+                wrong_count[a.question_id] = wrong_count.get(a.question_id, 0) + 1
+                last_wrong_id[a.question_id] = a.id
+
+        result = []
+        for qid, cnt in wrong_count.items():
+            q = by_id[qid]
+            latest = current_latest.get(qid)
+            mastered = bool(latest and latest.correct)
             _ = (q.id, q.type, q.question, q.options, q.answer, q.explanation,
                  q.source_course_id, q.source_timestamp, q.course_id, q.study_set_id)
+            result.append((q, mastered, cnt, last_wrong_id[qid]))
+        # 按最近一次答错时间倒序
+        result.sort(key=lambda t: t[3], reverse=True)
         if self._owns_session:
             session.close()
-        return wrong
+        return [(q, mastered, cnt) for q, mastered, cnt, _ in result]
 
     @staticmethod
     def is_correct(question: Question, answer: str) -> bool:
@@ -282,17 +332,33 @@ class QuizService:
     # ----- 清空 -----
 
     def clear(self, course_id: int | None = None, study_set_id: int | None = None) -> int:
-        """清空某范围的全部题及其作答记录，返回删除题数。"""
+        """清空当前题库（软删除）：题目 Tab 不再显示，但历史作答保留，错题本不受影响。
+
+        返回被清空的题数。
+        """
+        session = self._get_session()
+        now = datetime.now(timezone.utc)
+        questions = session.exec(self._active_select(course_id, study_set_id)).all()
+        n = 0
+        for q in questions:
+            q.cleared_at = now
+            session.add(q)
+            n += 1
+        session.commit()
+        if self._owns_session:
+            session.close()
+        return n
+
+    def clear_wrong_book(self, course_id: int | None = None, study_set_id: int | None = None) -> int:
+        """清空错题本历史：删除该范围内全部作答记录（题目本身保留）。返回删除的作答数。"""
         session = self._get_session()
         questions = session.exec(self._scope_select(course_id, study_set_id)).all()
         qids = [q.id for q in questions]
+        n = 0
         if qids:
             for a in session.exec(select(QuestionAttempt).where(QuestionAttempt.question_id.in_(qids))).all():
                 session.delete(a)
-        n = 0
-        for q in questions:
-            session.delete(q)
-            n += 1
+                n += 1
         session.commit()
         if self._owns_session:
             session.close()

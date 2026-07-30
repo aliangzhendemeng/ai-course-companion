@@ -148,12 +148,30 @@ class TestGrading:
 
 
 class TestClear:
-    def test_clear_removes_scope_questions(self, quiz_service, db_engine, sample_course):
+    def test_clear_soft_deletes_current_bank(self, quiz_service, db_engine, sample_course):
+        """清空题目是软删除：题目 Tab 不再显示，但记录仍在库里。"""
         service = quiz_service()
         service.generate(course_id=sample_course, count=2)
         n = service.clear(course_id=sample_course)
         assert n == 2
-        assert _questions(db_engine) == []
+        # 题目 Tab（active）为空
+        assert service.list_questions(course_id=sample_course) == []
+        # 数据库里题目仍保留（软删）
+        assert len(_questions(db_engine)) == 2
+
+    def test_clear_keeps_attempts_and_wrong_book(self, quiz_service, db_engine, sample_course):
+        """清空题目不影响错题本：历史作答保留，错题本仍显示。"""
+        service = quiz_service()
+        service.generate(course_id=sample_course, count=2)
+        choice = [q for q in _questions(db_engine) if q.type == "choice"][0]
+        service.submit_answer(choice.id, "B")  # 答错
+
+        service.clear(course_id=sample_course)
+        # 题目 Tab 空了
+        assert service.list_questions(course_id=sample_course) == []
+        # 错题本仍在
+        wrong = service.get_wrong_questions(course_id=sample_course)
+        assert [q.id for q, _, _ in wrong] == [choice.id]
 
 
 class TestWrongBook:
@@ -164,40 +182,54 @@ class TestWrongBook:
         choice = [q for q in questions if q.type == "choice"][0]
         judge = [q for q in questions if q.type == "judge"][0]
 
-        # 选择题答错，判断题答对
-        service.submit_answer(choice.id, "B")  # 正确是 A
-        service.submit_answer(judge.id, "正确")
+        service.submit_answer(choice.id, "B")  # 答错
+        service.submit_answer(judge.id, "正确")  # 答对
 
         wrong = service.get_wrong_questions(course_id=sample_course)
-        assert [q.id for q in wrong] == [choice.id]
+        assert [(q.id, mastered, cnt) for q, mastered, cnt in wrong] == [(choice.id, False, 1)]
 
-    def test_correct_after_wrong_removes_from_wrong_book(self, quiz_service, db_engine, sample_course):
+    def test_correct_after_wrong_marks_mastered_but_keeps_history(self, quiz_service, db_engine, sample_course):
+        """答错后答对：错题本保留该题并标已掌握，不移除。"""
         service = quiz_service()
         service.generate(course_id=sample_course, count=2)
         choice = [q for q in _questions(db_engine) if q.type == "choice"][0]
 
         service.submit_answer(choice.id, "B")  # 先答错
-        assert len(service.get_wrong_questions(course_id=sample_course)) == 1
+        wrong = service.get_wrong_questions(course_id=sample_course)
+        assert [(q.id, mastered) for q, mastered, _ in wrong] == [(choice.id, False)]
 
         service.submit_answer(choice.id, "A")  # 再答对
-        assert service.get_wrong_questions(course_id=sample_course) == []
+        wrong = service.get_wrong_questions(course_id=sample_course)
+        # 历史保留，标已掌握
+        assert [(q.id, mastered, cnt) for q, mastered, cnt in wrong] == [(choice.id, True, 1)]
+
+    def test_wrong_count_accumulates(self, quiz_service, db_engine, sample_course):
+        """同一题多次答错，wrong_count 累计。"""
+        service = quiz_service()
+        service.generate(course_id=sample_course, count=2)
+        choice = [q for q in _questions(db_engine) if q.type == "choice"][0]
+        service.submit_answer(choice.id, "B")  # 错
+        service.submit_answer(choice.id, "C")  # 又错
+        wrong = service.get_wrong_questions(course_id=sample_course)
+        assert [(q.id, cnt) for q, _, cnt in wrong] == [(choice.id, 2)]
 
     def test_unanswered_not_in_wrong_book(self, quiz_service, db_engine, sample_course):
         service = quiz_service()
         service.generate(course_id=sample_course, count=2)
         assert service.get_wrong_questions(course_id=sample_course) == []
 
-    def test_clear_removes_attempts(self, quiz_service, db_engine, sample_course):
+    def test_clear_wrong_book_removes_history_but_keeps_questions(self, quiz_service, db_engine, sample_course):
+        """清空错题本：删除作答记录，题目保留。"""
         service = quiz_service()
         service.generate(course_id=sample_course, count=2)
         choice = [q for q in _questions(db_engine) if q.type == "choice"][0]
         service.submit_answer(choice.id, "B")
 
-        service.clear(course_id=sample_course)
-        with Session(db_engine) as session:
-            from backend.models import QuestionAttempt
-            remaining = list(session.exec(select(QuestionAttempt)).all())
-        assert remaining == []
+        n = service.clear_wrong_book(course_id=sample_course)
+        assert n == 1
+        assert service.get_wrong_questions(course_id=sample_course) == []
+        # 题目仍在（题目 Tab 还有 2 题）
+        assert len(service.list_questions(course_id=sample_course)) == 2
 
 
 class TestProgressResume:

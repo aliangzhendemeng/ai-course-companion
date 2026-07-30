@@ -31,6 +31,7 @@ import {
   generateQuiz,
   listQuiz,
   listWrongQuiz,
+  clearWrongQuiz,
   submitQuizAnswer,
   clearQuiz,
   generateFlashcards,
@@ -52,6 +53,7 @@ import {
   type ChatDebug,
   type StudySet,
   type Question,
+  type WrongQuestion,
   type QuizGenerateResponse,
   type QuizAnswerResponse,
   type QuizScope,
@@ -193,11 +195,23 @@ export function useQuiz(scope: QuizScope, options?: Partial<UseQueryOptions<Ques
   })
 }
 
-export function useWrongQuiz(scope: QuizScope, options?: Partial<UseQueryOptions<Question[], Error>>) {
-  return useQuery<Question[], Error>({
+export function useWrongQuiz(scope: QuizScope, options?: Partial<UseQueryOptions<WrongQuestion[], Error>>) {
+  return useQuery<WrongQuestion[], Error>({
     queryKey: [...quizKey(scope), "wrong"],
     queryFn: () => listWrongQuiz(scope),
     ...options,
+  })
+}
+
+export function useClearWrongQuiz() {
+  const queryClient = useQueryClient()
+  return useMutation<void, Error, QuizScope>({
+    mutationFn: (scope) => clearWrongQuiz(scope),
+    onSuccess: (_, scope) => {
+      queryClient.invalidateQueries({ queryKey: [...quizKey(scope), "wrong"] })
+      // 清错题本删了作答记录，题目 Tab 的作答进度也要刷新
+      queryClient.invalidateQueries({ queryKey: quizKey(scope) })
+    },
   })
 }
 

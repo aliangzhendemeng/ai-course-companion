@@ -1,4 +1,4 @@
-"""测验 API：生成、列表、作答判分、清空。"""
+"""测验 API：生成、列表、作答判分、错题本、清空。"""
 
 import json
 
@@ -11,6 +11,7 @@ from backend.schemas import (
     QuizAnswerResponse,
     QuizGenerateRequest,
     QuizGenerateResponse,
+    WrongQuestionItem,
 )
 from backend.services.quiz_service import QuizService
 
@@ -33,6 +34,22 @@ def _to_detail(q, last_answer=None, last_correct=None) -> QuestionDetail:
     )
 
 
+def _to_wrong(q, mastered: bool, wrong_count: int) -> WrongQuestionItem:
+    options = json.loads(q.options) if q.options else None
+    return WrongQuestionItem(
+        id=q.id,
+        type=q.type,
+        question=q.question,
+        options=options,
+        answer=q.answer,
+        explanation=q.explanation,
+        source_course_id=q.source_course_id,
+        source_timestamp=q.source_timestamp,
+        mastered=mastered,
+        wrong_count=wrong_count,
+    )
+
+
 @router.post("/generate", response_model=QuizGenerateResponse)
 def generate_quiz(payload: QuizGenerateRequest):
     """生成测验题（追加式）。"""
@@ -52,20 +69,30 @@ def generate_quiz(payload: QuizGenerateRequest):
 
 @router.get("", response_model=list[QuestionDetail])
 def list_quiz(course_id: int | None = None, study_set_id: int | None = None):
-    """列出某范围的全部题，附带每题最近一次作答进度（断点续答）。"""
+    """列出当前题库（未被清空的题），附带每题最近一次作答进度（断点续答）。"""
     if course_id is None and study_set_id is None:
         raise HTTPException(status_code=400, detail="需提供 course_id 或 study_set_id")
     service = QuizService()
     return [_to_detail(q, last_answer, last_correct) for q, last_answer, last_correct in service.list_questions(course_id, study_set_id)]
 
 
-@router.get("/wrong", response_model=list[QuestionDetail])
+@router.get("/wrong", response_model=list[WrongQuestionItem])
 def list_wrong(course_id: int | None = None, study_set_id: int | None = None):
-    """错题本：某范围内最近一次作答为错的题。"""
+    """错题本（历史记录）：所有曾答错的题，答对后标"已掌握"不移除。"""
     if course_id is None and study_set_id is None:
         raise HTTPException(status_code=400, detail="需提供 course_id 或 study_set_id")
     service = QuizService()
-    return [_to_detail(q) for q in service.get_wrong_questions(course_id, study_set_id)]
+    return [_to_wrong(q, mastered, cnt) for q, mastered, cnt in service.get_wrong_questions(course_id, study_set_id)]
+
+
+@router.delete("/wrong")
+def clear_wrong(course_id: int | None = None, study_set_id: int | None = None):
+    """清空错题本历史（删除该范围全部作答记录，题目保留）。"""
+    if course_id is None and study_set_id is None:
+        raise HTTPException(status_code=400, detail="需提供 course_id 或 study_set_id")
+    service = QuizService()
+    n = service.clear_wrong_book(course_id, study_set_id)
+    return {"message": f"已清空错题本（{n} 条作答记录）", "deleted": n}
 
 
 @router.post("/{question_id}/answer", response_model=QuizAnswerResponse)
@@ -86,7 +113,7 @@ def submit_answer(question_id: int, payload: QuizAnswerRequest):
 
 @router.delete("")
 def clear_quiz(course_id: int | None = None, study_set_id: int | None = None):
-    """清空某范围的全部题（用于清空重生成）。"""
+    """清空当前题库（软删除：题目 Tab 不再显示，错题本历史保留）。"""
     if course_id is None and study_set_id is None:
         raise HTTPException(status_code=400, detail="需提供 course_id 或 study_set_id")
     service = QuizService()

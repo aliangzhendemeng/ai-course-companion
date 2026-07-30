@@ -30,6 +30,9 @@ def create_db_and_tables() -> None:
 # 增量列迁移：(表名, 列名, 列定义)。已存在的列会被跳过。
 _ADD_COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("chatmessage", "course_ids", "VARCHAR"),
+    ("question", "generated_at", "DATETIME"),
+    ("question", "cleared_at", "DATETIME"),
+    ("questionattempt", "question_generated_at", "DATETIME"),
 ]
 
 

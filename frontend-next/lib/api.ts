@@ -283,6 +283,12 @@ export interface QuizAnswerResponse {
   explanation: string | null
 }
 
+/** 错题本条目：历史答错记录，答对后标"已掌握"不移除 */
+export interface WrongQuestion extends Question {
+  mastered: boolean
+  wrong_count: number
+}
+
 /** 范围参数：课程或学习集二选一 */
 export interface QuizScope {
   courseId?: number
@@ -310,8 +316,12 @@ export async function listQuiz(scope: QuizScope): Promise<Question[]> {
   return request<Question[]>(`/api/quiz?${scopeQuery(scope)}`)
 }
 
-export async function listWrongQuiz(scope: QuizScope): Promise<Question[]> {
-  return request<Question[]>(`/api/quiz/wrong?${scopeQuery(scope)}`)
+export async function listWrongQuiz(scope: QuizScope): Promise<WrongQuestion[]> {
+  return request<WrongQuestion[]>(`/api/quiz/wrong?${scopeQuery(scope)}`)
+}
+
+export async function clearWrongQuiz(scope: QuizScope): Promise<void> {
+  await request(`/api/quiz/wrong?${scopeQuery(scope)}`, { method: "DELETE" })
 }
 
 export async function submitQuizAnswer(questionId: number, answer: string): Promise<QuizAnswerResponse> {

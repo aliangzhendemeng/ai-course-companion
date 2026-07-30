@@ -128,6 +128,13 @@ class QuizAnswerResponse(BaseModel):
     explanation: str | None = None
 
 
+class WrongQuestionItem(QuestionDetail):
+    """错题本条目：历史答错记录，答对后标"已掌握"但不移除。"""
+
+    mastered: bool  # 当前题库批次最近一次作答是否答对
+    wrong_count: int  # 历史答错次数
+
+
 # ===== 闪卡（Flashcard）=====
 
 class FlashcardItem(BaseModel):
