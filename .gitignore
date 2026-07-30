@@ -18,3 +18,14 @@ data/
 *.egg-info/
 dist/
 build/
+
+# 学伴角色形象素材（第三方 IP，不进仓库；仅保留 meta.json 配置）
+# 忽略各角色目录下的图片/动画素材，但保留 meta.json 与目录结构
+assets/characters/**/*.png
+assets/characters/**/*.jpg
+assets/characters/**/*.jpeg
+assets/characters/**/*.gif
+assets/characters/**/*.webp
+assets/characters/**/*.svg
+assets/characters/**/*.mp4
+assets/characters/**/*.webm

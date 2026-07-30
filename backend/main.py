@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import settings
 from backend.database import create_db_and_tables
 from backend.logger import setup_logging
-from backend.api import chat, courses, debug, flashcards, history, progress, quiz, settings as settings_api, study_sets, summaries
+from backend.api import characters, chat, courses, debug, flashcards, history, progress, quiz, settings as settings_api, study_sets, summaries
 
 
 @asynccontextmanager
@@ -48,6 +48,7 @@ app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"
 app.include_router(study_sets.router, prefix="/api/study-sets", tags=["study-sets"])
 app.include_router(quiz.router, prefix="/api/quiz", tags=["quiz"])
 app.include_router(flashcards.router, prefix="/api/flashcards", tags=["flashcards"])
+app.include_router(characters.router, prefix="/api/characters", tags=["characters"])
 
 
 @app.get("/health")
