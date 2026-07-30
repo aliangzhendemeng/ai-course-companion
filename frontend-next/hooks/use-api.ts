@@ -28,6 +28,15 @@ import {
   createStudySet,
   updateStudySet,
   deleteStudySet,
+  generateQuiz,
+  listQuiz,
+  submitQuizAnswer,
+  clearQuiz,
+  generateFlashcards,
+  listFlashcards,
+  getFlashcardStats,
+  setFlashcardFamiliarity,
+  clearFlashcards,
   type Course,
   type CourseDetail,
   type Summary,
@@ -41,6 +50,14 @@ import {
   type SummaryDebug,
   type ChatDebug,
   type StudySet,
+  type Question,
+  type QuizGenerateResponse,
+  type QuizAnswerResponse,
+  type QuizScope,
+  type Flashcard,
+  type FlashcardGenerateResponse,
+  type FlashcardStats,
+  type Familiarity,
 } from "@/lib/api"
 
 export function useCourses(options?: Partial<UseQueryOptions<Course[], Error>>) {
@@ -157,6 +174,98 @@ export function useDeleteStudySet() {
     mutationFn: deleteStudySet,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["study-sets"] })
+    },
+  })
+}
+
+// ---- 测验 ----
+
+function quizKey(scope: QuizScope) {
+  return scope.studySetId != null ? ["quiz", "set", scope.studySetId] : ["quiz", "course", scope.courseId]
+}
+
+export function useQuiz(scope: QuizScope, options?: Partial<UseQueryOptions<Question[], Error>>) {
+  return useQuery<Question[], Error>({
+    queryKey: quizKey(scope),
+    queryFn: () => listQuiz(scope),
+    ...options,
+  })
+}
+
+export function useGenerateQuiz() {
+  const queryClient = useQueryClient()
+  return useMutation<QuizGenerateResponse, Error, { scope: QuizScope; count?: number }>({
+    mutationFn: ({ scope, count }) => generateQuiz(scope, count),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: quizKey(variables.scope) })
+    },
+  })
+}
+
+export function useSubmitQuizAnswer() {
+  return useMutation<QuizAnswerResponse, Error, { questionId: number; answer: string }>({
+    mutationFn: ({ questionId, answer }) => submitQuizAnswer(questionId, answer),
+  })
+}
+
+export function useClearQuiz() {
+  const queryClient = useQueryClient()
+  return useMutation<void, Error, QuizScope>({
+    mutationFn: (scope) => clearQuiz(scope),
+    onSuccess: (_, scope) => {
+      queryClient.invalidateQueries({ queryKey: quizKey(scope) })
+    },
+  })
+}
+
+// ---- 闪卡 ----
+
+function flashcardKey(scope: QuizScope) {
+  return scope.studySetId != null ? ["flashcards", "set", scope.studySetId] : ["flashcards", "course", scope.courseId]
+}
+
+export function useFlashcards(scope: QuizScope, options?: Partial<UseQueryOptions<Flashcard[], Error>>) {
+  return useQuery<Flashcard[], Error>({
+    queryKey: flashcardKey(scope),
+    queryFn: () => listFlashcards(scope),
+    ...options,
+  })
+}
+
+export function useFlashcardStats(scope: QuizScope, options?: Partial<UseQueryOptions<FlashcardStats, Error>>) {
+  return useQuery<FlashcardStats, Error>({
+    queryKey: [...flashcardKey(scope), "stats"],
+    queryFn: () => getFlashcardStats(scope),
+    ...options,
+  })
+}
+
+export function useGenerateFlashcards() {
+  const queryClient = useQueryClient()
+  return useMutation<FlashcardGenerateResponse, Error, { scope: QuizScope; count?: number }>({
+    mutationFn: ({ scope, count }) => generateFlashcards(scope, count),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: flashcardKey(variables.scope) })
+    },
+  })
+}
+
+export function useSetFlashcardFamiliarity() {
+  const queryClient = useQueryClient()
+  return useMutation<Flashcard, Error, { scope: QuizScope; flashcardId: number; familiarity: Familiarity }>({
+    mutationFn: ({ flashcardId, familiarity }) => setFlashcardFamiliarity(flashcardId, familiarity),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: flashcardKey(variables.scope) })
+    },
+  })
+}
+
+export function useClearFlashcards() {
+  const queryClient = useQueryClient()
+  return useMutation<void, Error, QuizScope>({
+    mutationFn: (scope) => clearFlashcards(scope),
+    onSuccess: (_, scope) => {
+      queryClient.invalidateQueries({ queryKey: flashcardKey(scope) })
     },
   })
 }

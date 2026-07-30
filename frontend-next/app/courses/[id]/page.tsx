@@ -6,9 +6,12 @@ import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { VideoPlayer, type VideoPlayerRef } from "@/components/VideoPlayer"
 import { SummaryTabs } from "@/components/SummaryTabs"
 import { ChatPanel } from "@/components/ChatPanel"
+import { QuizPanel } from "@/components/QuizPanel"
+import { FlashcardPanel } from "@/components/FlashcardPanel"
 import { useCourse, useSummary, useChatHistory, useAskQuestion } from "@/hooks/use-api"
 
 export default function CourseDetailPage() {
@@ -77,7 +80,22 @@ export default function CourseDetailPage() {
             className="aspect-video w-full overflow-hidden rounded-xl bg-black"
           />
           <div className="flex-1 rounded-xl border bg-card p-4 shadow-sm">
-            <SummaryTabs summary={summary} isLoading={summaryLoading} onSeek={handleSeek} />
+            <Tabs defaultValue="summary" className="flex h-full flex-col">
+              <TabsList className="grid w-full grid-cols-3">
+                <TabsTrigger value="summary">总结</TabsTrigger>
+                <TabsTrigger value="quiz">测验</TabsTrigger>
+                <TabsTrigger value="flashcard">闪卡</TabsTrigger>
+              </TabsList>
+              <TabsContent value="summary" className="mt-4 flex-1">
+                <SummaryTabs summary={summary} isLoading={summaryLoading} onSeek={handleSeek} />
+              </TabsContent>
+              <TabsContent value="quiz" className="mt-4 flex-1">
+                <QuizPanel scope={{ courseId }} onSeek={handleSeek} />
+              </TabsContent>
+              <TabsContent value="flashcard" className="mt-4 flex-1">
+                <FlashcardPanel scope={{ courseId }} onSeek={handleSeek} />
+              </TabsContent>
+            </Tabs>
           </div>
         </div>
 

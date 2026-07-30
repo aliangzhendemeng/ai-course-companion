@@ -254,3 +254,124 @@ export async function getCourseSummaryDebug(courseId: number): Promise<SummaryDe
 export async function getChatDebug(messageId: number): Promise<ChatDebug> {
   return request<ChatDebug>(`/api/chat/${messageId}/debug`)
 }
+
+// ---- 测验（Question）----
+
+export interface Question {
+  id: number
+  type: "choice" | "judge"
+  question: string
+  options: string[] | null
+  answer: string
+  explanation: string | null
+  source_course_id: number | null
+  source_timestamp: number | null
+}
+
+export interface QuizGenerateResponse {
+  generated: number
+  total: number
+}
+
+export interface QuizAnswerResponse {
+  question_id: number
+  correct: boolean
+  answer: string
+  explanation: string | null
+}
+
+/** 范围参数：课程或学习集二选一 */
+export interface QuizScope {
+  courseId?: number
+  studySetId?: number
+}
+
+function scopeQuery(scope: QuizScope): string {
+  if (scope.studySetId != null) return `study_set_id=${scope.studySetId}`
+  return `course_id=${scope.courseId}`
+}
+
+export async function generateQuiz(scope: QuizScope, count = 12): Promise<QuizGenerateResponse> {
+  return request<QuizGenerateResponse>("/api/quiz/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      course_id: scope.courseId ?? null,
+      study_set_id: scope.studySetId ?? null,
+      count,
+    }),
+  })
+}
+
+export async function listQuiz(scope: QuizScope): Promise<Question[]> {
+  return request<Question[]>(`/api/quiz?${scopeQuery(scope)}`)
+}
+
+export async function submitQuizAnswer(questionId: number, answer: string): Promise<QuizAnswerResponse> {
+  return request<QuizAnswerResponse>(`/api/quiz/${questionId}/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answer }),
+  })
+}
+
+export async function clearQuiz(scope: QuizScope): Promise<void> {
+  await request(`/api/quiz?${scopeQuery(scope)}`, { method: "DELETE" })
+}
+
+// ---- 闪卡（Flashcard）----
+
+export type Familiarity = "known" | "fuzzy" | "unknown"
+
+export interface Flashcard {
+  id: number
+  front: string
+  back: string
+  familiarity: Familiarity
+  source_course_id: number | null
+  source_timestamp: number | null
+}
+
+export interface FlashcardGenerateResponse {
+  generated: number
+  total: number
+}
+
+export interface FlashcardStats {
+  total: number
+  known: number
+  fuzzy: number
+  unknown: number
+}
+
+export async function generateFlashcards(scope: QuizScope, count = 15): Promise<FlashcardGenerateResponse> {
+  return request<FlashcardGenerateResponse>("/api/flashcards/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      course_id: scope.courseId ?? null,
+      study_set_id: scope.studySetId ?? null,
+      count,
+    }),
+  })
+}
+
+export async function listFlashcards(scope: QuizScope): Promise<Flashcard[]> {
+  return request<Flashcard[]>(`/api/flashcards?${scopeQuery(scope)}`)
+}
+
+export async function getFlashcardStats(scope: QuizScope): Promise<FlashcardStats> {
+  return request<FlashcardStats>(`/api/flashcards/stats?${scopeQuery(scope)}`)
+}
+
+export async function setFlashcardFamiliarity(flashcardId: number, familiarity: Familiarity): Promise<Flashcard> {
+  return request<Flashcard>(`/api/flashcards/${flashcardId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ familiarity }),
+  })
+}
+
+export async function clearFlashcards(scope: QuizScope): Promise<void> {
+  await request(`/api/flashcards?${scopeQuery(scope)}`, { method: "DELETE" })
+}
