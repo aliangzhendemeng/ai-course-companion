@@ -2,11 +2,13 @@
 
 import { useState } from "react"
 import { Plus, Loader2, Search, Upload } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { CourseCard } from "@/components/CourseCard"
 import { UploadModal } from "@/components/UploadModal"
+import { StudySetStudyPanel } from "@/components/StudySetStudyPanel"
 import { useCourses, useUploadCourse, useDeleteCourse, useReprocessCourse } from "@/hooks/use-api"
 import type { Course } from "@/lib/api"
 
@@ -17,6 +19,7 @@ interface CoursesClientProps {
 export function CoursesClient({ initialCourses }: CoursesClientProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [search, setSearch] = useState("")
+  const router = useRouter()
 
   const hasProcessing = (courses?: Course[]) =>
     courses?.some((c) => c.status !== "completed" && c.status !== "failed") ?? false
@@ -79,6 +82,18 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
           />
         </div>
       </div>
+
+      {completedCount > 0 && (
+        <div className="mb-6">
+          <StudySetStudyPanel
+            onSeek={(timestamp, targetCourseId) => {
+              if (targetCourseId) {
+                router.push(`/courses/${targetCourseId}?timestamp=${timestamp}`)
+              }
+            }}
+          />
+        </div>
+      )}
 
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
