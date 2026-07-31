@@ -8,29 +8,53 @@ import { HistoryCard, type QAPair } from "@/components/HistoryCard"
 import { useChatHistoryAll, useDeleteChatHistory } from "@/hooks/use-api"
 import type { HistoryItem } from "@/lib/api"
 
-/** 把按时间倒序的消息列表配对成 Q&A（用户问题 + 助手回答）。 */
+/** 把按时间倒序的消息列表配对成 Q&A（用户问题 + 助手回答）。
+ *
+ * 必须先按"对话上下文"（同一课程/同一组课程）分组再配对：
+ * 不同课程的问答在时间上交错，若全局混排，一门课的 user 后面紧跟的可能是
+ * 另一门课的消息，导致 user 找不到自己的 assistant，误显示"无回答记录"。
+ */
+function contextKey(m: HistoryItem): string {
+  // set/all 用实际涉及的课程集合做 key；course 用锚点课程 id
+  if (m.course_ids && m.course_ids.length > 0) {
+    return "set:" + [...m.course_ids].sort((a, b) => a - b).join(",")
+  }
+  return `course:${m.course_id}`
+}
+
 function pairMessages(messages: HistoryItem[]): QAPair[] {
-  // 升序处理，便于把 user 和紧随其后的 assistant 配对
+  // 1) 按对话上下文分组（保持各组内时间升序）
+  const groups = new Map<string, HistoryItem[]>()
   const asc = [...messages].sort(
     (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
+  for (const m of asc) {
+    const key = contextKey(m)
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(m)
+  }
+
+  // 2) 各组内把 user 与紧随的 assistant 配对
   const pairs: QAPair[] = []
-  for (let i = 0; i < asc.length; i++) {
-    const cur = asc[i]
-    const next = asc[i + 1]
-    if (cur.role === "user" && next && next.role === "assistant") {
-      pairs.push({ question: cur, answer: next })
-      i++
-    } else if (cur.role === "assistant") {
-      // 孤立回答（找不到对应问题）
-      pairs.push({ answer: cur })
-    } else {
-      // 孤立问题（没有回答）
-      pairs.push({ question: cur })
+  for (const msgs of Array.from(groups.values())) {
+    for (let i = 0; i < msgs.length; i++) {
+      const cur = msgs[i]
+      const next = msgs[i + 1]
+      if (cur.role === "user" && next && next.role === "assistant") {
+        pairs.push({ question: cur, answer: next })
+        i++
+      } else if (cur.role === "assistant") {
+        pairs.push({ answer: cur })
+      } else {
+        pairs.push({ question: cur })
+      }
     }
   }
-  // 再倒序，最新的在最上面
-  return pairs.reverse()
+
+  // 3) 按时间倒序，最新在最上（用每组回答/问题的时间）
+  const timeOf = (p: QAPair) =>
+    new Date((p.answer ?? p.question)!.created_at).getTime()
+  return pairs.sort((a, b) => timeOf(b) - timeOf(a))
 }
 
 export default function HistoryPage() {
