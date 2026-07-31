@@ -208,6 +208,9 @@ function MessageBubble({
 }) {
   const isUser = message.role === "user"
   const groups = deduplicateSources(normalizeSources(message.sources))
+  // 当前选中的来源（点击高亮，便于和正文/时间点对应）
+  const [activeSource, setActiveSource] = useState<number | null>(null)
+
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
@@ -220,12 +223,22 @@ function MessageBubble({
         <MarkdownRenderer>{message.content}</MarkdownRenderer>
         {!isUser && groups.length > 0 ? (
           <div className="mt-3 space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">参考来源</p>
-            <div className="flex flex-wrap gap-2">
+            <p className="text-xs font-medium text-muted-foreground">参考来源（点击跳转到视频对应位置）</p>
+            <ol className="flex flex-col gap-1.5">
               {groups.map((group, idx) => (
-                <SourceChip key={idx} group={group} onSeek={onSeek} />
+                <li key={idx}>
+                  <SourceChip
+                    index={idx + 1}
+                    group={group}
+                    active={activeSource === idx}
+                    onSeek={(ts, cid) => {
+                      setActiveSource(idx)
+                      onSeek?.(ts, cid)
+                    }}
+                  />
+                </li>
               ))}
-            </div>
+            </ol>
           </div>
         ) : null}
       </div>
@@ -248,24 +261,36 @@ function normalizeSources(sources: ChatMessage["sources"]): Source[] {
 }
 
 function SourceChip({
+  index,
   group,
+  active,
   onSeek,
 }: {
+  index: number
   group: import("@/lib/timestamp").DeduplicatedSource
+  active?: boolean
   onSeek?: (timestamp: number, courseId?: number) => void
 }) {
   const first = group.sources[0]
   const label = group.courseTitle ? `${group.courseTitle} · ` : ""
   const count = group.sources.length
   const time = formatTimestamp(group.timestamp)
+  // 对应文本预览（悬停可见，帮助判断该来源讲了什么）
+  const preview = group.sources.map((s) => s.text).filter(Boolean).join(" / ")
   return (
     <button
       onClick={() => onSeek?.(group.timestamp, first.course_id || undefined)}
-      className="max-w-[220px] truncate rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-      title={`${first.type} · ${time} · ${first.text}`}
+      className={`flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-left text-xs transition-colors ${
+        active
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-transparent bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+      }`}
+      title={preview ? `${time} · ${preview}` : time}
     >
-      {label}{time}
-      {count > 1 && <span className="ml-1 text-[10px] opacity-80">({count} 个来源)</span>}
+      <span className="shrink-0 font-semibold text-primary">[{index}]</span>
+      <span className="shrink-0 font-medium">{label}{time}</span>
+      {preview && <span className="truncate opacity-70">{preview}</span>}
+      {count > 1 && <span className="shrink-0 text-[10px] opacity-80">({count}个来源)</span>}
     </button>
   )
 }
