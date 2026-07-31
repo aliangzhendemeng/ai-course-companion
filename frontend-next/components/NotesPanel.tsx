@@ -156,11 +156,11 @@ export function NotesPanel({ courseId, getCurrentTime, onSeek }: NotesPanelProps
                       <Bookmark className="h-3 w-3" /> 书签
                     </span>
                   ) : null}
-                  <div className="ml-auto flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <div className="ml-auto flex items-center gap-1">
                     {note.kind === "note" && editingId !== note.id && (
                       <button
                         onClick={() => startEdit(note)}
-                        className="text-muted-foreground hover:text-primary"
+                        className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-primary"
                         title="编辑"
                       >
                         <Pencil className="h-3.5 w-3.5" />
@@ -170,10 +170,16 @@ export function NotesPanel({ courseId, getCurrentTime, onSeek }: NotesPanelProps
                       onClick={() =>
                         deleteMutation.mutate({ noteId: note.id, courseId })
                       }
-                      className="text-muted-foreground hover:text-destructive"
+                      disabled={deleteMutation.isPending}
+                      className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-destructive disabled:opacity-50"
                       title="删除"
                     >
-                      <Trash2 className="h-3.5 w-3.5" />
+                      {deleteMutation.isPending &&
+                      deleteMutation.variables?.noteId === note.id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-3.5 w-3.5" />
+                      )}
                     </button>
                   </div>
                 </div>
