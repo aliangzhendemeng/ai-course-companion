@@ -168,3 +168,26 @@ class FlashcardStats(BaseModel):
     known: int
     fuzzy: int
     unknown: int
+
+
+# ===== 笔记/书签（Note）=====
+
+class NoteItem(BaseModel):
+    id: int
+    course_id: int
+    kind: str  # note | bookmark
+    content: str
+    timestamp: float  # 视频时间点（秒）
+    created_at: datetime
+    updated_at: datetime
+
+
+class NoteCreateRequest(BaseModel):
+    course_id: int
+    kind: str = "note"  # note | bookmark
+    content: str = ""
+    timestamp: float = 0.0
+
+
+class NoteUpdateRequest(BaseModel):
+    content: str

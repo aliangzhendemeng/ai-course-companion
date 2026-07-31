@@ -9,6 +9,7 @@ interface VideoPlayerProps {
 
 export interface VideoPlayerRef {
   seek: (time: number) => void
+  getCurrentTime: () => number
 }
 
 export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
@@ -24,6 +25,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
           void video.play()
         }
       },
+      getCurrentTime: () => videoRef.current?.currentTime ?? 0,
     }))
 
     useEffect(() => {

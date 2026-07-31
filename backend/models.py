@@ -171,3 +171,19 @@ class Flashcard(SQLModel, table=True):
     source_course_id: Optional[int] = Field(default=None, index=True)
     source_timestamp: Optional[float] = None
     created_at: datetime = Field(default_factory=_utcnow)
+
+
+class Note(SQLModel, table=True):
+    """笔记/书签：学生看视频时在某时间点记录的内容。
+
+    kind = "note" 笔记（带文字内容）| "bookmark" 书签（纯时间点标记，content 可空）。
+    timestamp 为视频秒数，点击可跳回对应时间点。按时间排序展示。
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    course_id: int = Field(foreign_key="course.id", index=True)
+    kind: str = Field(default="note", index=True)  # note 笔记 | bookmark 书签
+    content: str = Field(default="")  # 笔记文字；书签可空或一句话备注
+    timestamp: float = Field(default=0.0)  # 视频时间点（秒）
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)

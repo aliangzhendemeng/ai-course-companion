@@ -12,6 +12,7 @@ import { SummaryTabs } from "@/components/SummaryTabs"
 import { ChatPanel } from "@/components/ChatPanel"
 import { QuizPanel } from "@/components/QuizPanel"
 import { FlashcardPanel } from "@/components/FlashcardPanel"
+import { NotesPanel } from "@/components/NotesPanel"
 import { useCourse, useSummary, useChatHistory, useAskQuestion } from "@/hooks/use-api"
 import { useCompanion } from "@/components/companion/CompanionContext"
 
@@ -89,10 +90,11 @@ export default function CourseDetailPage() {
           />
           <div className="flex-1 rounded-xl border bg-card p-4 shadow-sm">
             <Tabs defaultValue="summary" className="flex h-full flex-col">
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 <TabsTrigger value="summary">总结</TabsTrigger>
                 <TabsTrigger value="quiz">测验</TabsTrigger>
                 <TabsTrigger value="flashcard">闪卡</TabsTrigger>
+                <TabsTrigger value="notes">笔记</TabsTrigger>
               </TabsList>
               <TabsContent value="summary" className="mt-4 flex-1">
                 <SummaryTabs summary={summary} isLoading={summaryLoading} onSeek={handleSeek} />
@@ -102,6 +104,13 @@ export default function CourseDetailPage() {
               </TabsContent>
               <TabsContent value="flashcard" className="mt-4 flex-1">
                 <FlashcardPanel scope={{ courseId }} onSeek={handleSeek} />
+              </TabsContent>
+              <TabsContent value="notes" className="mt-4 flex-1">
+                <NotesPanel
+                  courseId={courseId}
+                  getCurrentTime={() => videoRef.current?.getCurrentTime() ?? 0}
+                  onSeek={handleSeek}
+                />
               </TabsContent>
             </Tabs>
           </div>

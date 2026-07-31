@@ -40,6 +40,10 @@ import {
   setFlashcardFamiliarity,
   clearFlashcards,
   listCharacters,
+  listNotes,
+  createNote,
+  updateNote,
+  deleteNote,
   type Course,
   type CourseDetail,
   type Summary,
@@ -63,6 +67,8 @@ import {
   type FlashcardStats,
   type Familiarity,
   type Character,
+  type Note,
+  type NoteKind,
 } from "@/lib/api"
 
 export function useCourses(options?: Partial<UseQueryOptions<Course[], Error>>) {
@@ -298,6 +304,50 @@ export function useClearFlashcards() {
     mutationFn: (scope) => clearFlashcards(scope),
     onSuccess: (_, scope) => {
       queryClient.invalidateQueries({ queryKey: flashcardKey(scope) })
+    },
+  })
+}
+
+// ---- 笔记/书签 ----
+
+function noteKey(courseId: number) {
+  return ["notes", "course", courseId]
+}
+
+export function useNotes(courseId: number, options?: Partial<UseQueryOptions<Note[], Error>>) {
+  return useQuery<Note[], Error>({
+    queryKey: noteKey(courseId),
+    queryFn: () => listNotes(courseId),
+    ...options,
+  })
+}
+
+export function useCreateNote() {
+  const queryClient = useQueryClient()
+  return useMutation<Note, Error, { course_id: number; kind: NoteKind; content?: string; timestamp: number }>({
+    mutationFn: (payload) => createNote(payload),
+    onSuccess: (note) => {
+      queryClient.invalidateQueries({ queryKey: noteKey(note.course_id) })
+    },
+  })
+}
+
+export function useUpdateNote() {
+  const queryClient = useQueryClient()
+  return useMutation<Note, Error, { noteId: number; courseId: number; content: string }>({
+    mutationFn: ({ noteId, content }) => updateNote(noteId, content),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: noteKey(variables.courseId) })
+    },
+  })
+}
+
+export function useDeleteNote() {
+  const queryClient = useQueryClient()
+  return useMutation<void, Error, { noteId: number; courseId: number }>({
+    mutationFn: ({ noteId }) => deleteNote(noteId),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: noteKey(variables.courseId) })
     },
   })
 }

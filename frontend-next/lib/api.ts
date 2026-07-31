@@ -397,10 +397,52 @@ export async function clearFlashcards(scope: QuizScope): Promise<void> {
   await request(`/api/flashcards?${scopeQuery(scope)}`, { method: "DELETE" })
 }
 
+// ---- 笔记/书签（Note）----
+
+export type NoteKind = "note" | "bookmark"
+
+export interface Note {
+  id: number
+  course_id: number
+  kind: NoteKind
+  content: string
+  timestamp: number
+  created_at: string
+  updated_at: string
+}
+
+export async function listNotes(courseId: number): Promise<Note[]> {
+  return request<Note[]>(`/api/notes?course_id=${courseId}`)
+}
+
+export async function createNote(payload: {
+  course_id: number
+  kind: NoteKind
+  content?: string
+  timestamp: number
+}): Promise<Note> {
+  return request<Note>("/api/notes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateNote(noteId: number, content: string): Promise<Note> {
+  return request<Note>(`/api/notes/${noteId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  })
+}
+
+export async function deleteNote(noteId: number): Promise<void> {
+  await request(`/api/notes/${noteId}`, { method: "DELETE" })
+}
+
 // ---- 学伴角色（Companion Character）----
 
-export interface Character {
-  id: string
+export interface Character {  id: string
   name: string
   catchphrases: {
     correct?: string
