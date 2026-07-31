@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from pathlib import Path
 
 import bm25s
@@ -417,7 +418,16 @@ class RAGEngine:
         return self._answer_with_docs(question, docs, multi_course=False)
 
     def _load_course_full_text(self, course_id: int) -> str:
-        """从数据库加载一门课的完整清洗文本（字幕 + OCR）。"""
+        """从数据库加载一门课的完整清洗文本（字幕 + OCR，按时间排序）。"""
+        segments = self._load_course_segments(course_id)
+        return "\n\n".join(text for _ts, _st, text in segments)
+
+    def _load_course_segments(self, course_id: int) -> list[tuple[float, str, str]]:
+        """加载一门课的内容段落（带时间戳），按时间排序。
+
+        返回 [(timestamp, source_type, text), ...]：source_type 为 transcript/vision_desc。
+        用于按时间引用：正文 [N] 与来源列表一一对应并锚定视频时间点。
+        """
         with Session(engine) as session:
             transcripts = session.exec(
                 select(Transcript).where(Transcript.course_id == course_id).order_by(Transcript.start_time)
@@ -426,61 +436,124 @@ class RAGEngine:
                 select(Frame).where(Frame.course_id == course_id).order_by(Frame.timestamp)
             ).all()
 
-        parts = []
+        segments: list[tuple[float, str, str]] = []
         for t in transcripts:
-            if t.text:
-                parts.append(f"[字幕 {format_timestamp(t.start_time)}] {t.text}")
+            if t.text and t.text.strip():
+                segments.append((float(t.start_time), "transcript", t.text.strip()))
         for f in frames:
             if f.ocr_text:
                 merged = self._merge_ocr_text(f.ocr_text)
                 if merged:
-                    parts.append(f"[课件 {format_timestamp(f.timestamp)}] {merged}")
+                    segments.append((float(f.timestamp), "vision_desc", merged))
+        segments.sort(key=lambda s: s[0])
+        return segments
 
-        return "\n\n".join(parts)
+    @staticmethod
+    def _cited_timestamps(text: str) -> list[int]:
+        """从回答中提取被引用的时间戳（秒，按首次出现顺序去重）。
+
+        识别 [M:SS] 或 [H:MM:SS] 形式的引用，如 [1:23] -> 83。
+        """
+        seen: list[int] = []
+        for m in re.findall(r"\[(\d+):(\d{2})(?::(\d{2}))?\]", text):
+            if m[2]:  # H:MM:SS
+                sec = int(m[0]) * 3600 + int(m[1]) * 60 + int(m[2])
+            else:  # M:SS
+                sec = int(m[0]) * 60 + int(m[1])
+            if sec not in seen:
+                seen.append(sec)
+        return seen
 
     def _query_with_full_text(self, question: str, full_text: str, course_id: int) -> dict:
-        """使用完整课程文本直接回答。"""
+        """使用完整课程文本回答，正文论点标注 [N]，编号与来源严格对应。
+
+        关键：给每段标注时间 [MM:SS] 并要求 LLM 在论点后引用该时间；再把每个被引用的
+        时间映射为稳定编号 [N]（按出现顺序），来源列表第 N 条即正文 [N]，且锚定到
+        最接近的内容段落的视频时间点。这样无论引用哪些段落，编号与来源永远一一对应。
+        """
+        segments = self._load_course_segments(course_id)
+        course_titles = self._get_course_titles([course_id])
+        title = course_titles.get(course_id)
+
+        if not segments:
+            return {
+                "answer": "根据现有课程内容，无法找到答案。",
+                "debug": {"model": getattr(self.llm, "model_identifier", "unknown"), "prompt": "", "context": "", "raw_answer": ""},
+                "sources": [],
+            }
+
+        # 每段标注起始时间 [MM:SS]，截断到全文上限
+        numbered_parts: list[str] = []
+        kept: list[tuple[float, str, str]] = []
+        total = 0
+        for ts, st, text in segments:
+            entry = f"[{format_timestamp(ts)}] {text}"
+            if total + len(entry) > self.FULL_TEXT_MAX_CHARS and kept:
+                break
+            numbered_parts.append(entry)
+            kept.append((ts, st, text))
+            total += len(entry)
+        context = "\n\n".join(numbered_parts)
+
         system_prompt = (
-            "你是一位严谨的课程助教。请严格根据下面提供的完整课程内容回答用户问题。"
+            "你是一位严谨的课程助教。请严格根据下面提供的课程内容回答用户问题。"
+            "每段开头有方括号标注的时间（该段在视频中的起始时间）。"
             "如果内容中没有包含问题的答案，请明确告诉用户'根据现有课程内容，无法找到答案'，不要编造。"
         )
         user_prompt = f"""
-        以下是完整课程内容：
+        以下是课程内容，每段开头标注了它在视频中的时间：
 
-        {full_text}
+        {context}
 
         用户问题：{question}
 
         要求：
-        1. 仅基于以上课程内容回答。
-        2. 如果内容中没有答案，明确说明无法找到。
-        3. 回答尽量准确、完整。
+        1. 仅基于以上内容回答。
+        2. 每个论点、结论或要点之后，必须紧跟支撑它的内容所对应的时间标注，格式与上文一致，例如：……是基本概念[10:39]。有多个依据可并列 [10:39][14:04]。
+        3. 只引用上文真实出现过的时间，不要编造或修改时间。
+        4. 如果内容中没有答案，明确说明无法找到。
         """
 
         raw_answer = self.llm.chat(system_prompt, user_prompt, max_tokens=1500)
 
-        # 用检索片段生成带真实时间戳和课程名的来源，而不是 0:00 占位
-        collection_name = self._get_collection_name(course_id)
-        try:
-            source_docs = self._retrieve(collection_name, collection_name, question)
-        except Exception as e:
-            logger.warning("全文问答来源检索失败 course=%s: %s", course_id, e)
-            source_docs = []
-        course_titles = self._get_course_titles([course_id])
+        # 按"回答中引用的时间出现顺序"建立来源列表，并给每个引用分配稳定编号 [1][2]…
+        # 这样正文 [N] 永远对应来源列表第 N 条，且每个来源都锚定到视频时间点。
+        cited_ts = self._cited_timestamps(raw_answer)
+        ts_to_idx = {ts: i + 1 for i, ts in enumerate(cited_ts)}
+
+        def _repl(m: re.Match) -> str:
+            if m.group(3):
+                sec = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+            else:
+                sec = int(m.group(1)) * 60 + int(m.group(2))
+            return f"[{ts_to_idx[sec]}]"
+
+        answer = re.sub(r"\[(\d+):(\d{2})(?::(\d{2}))?\]", _repl, raw_answer)
+
+        # 来源：只含被引用的，按编号顺序，时间锚定到最接近的段落起始时间
+        kept_ts = [ts for ts, _st, _t in kept]
+        seg_by_ts = {ts: (st, text) for ts, st, text in kept}
+        sources = []
+        for ts in cited_ts:
+            nearest = min(kept_ts, key=lambda k: abs(k - ts))
+            st, text = seg_by_ts[nearest]
+            sources.append({
+                "type": st,
+                "timestamp": nearest,
+                "text": text[:200],
+                "course_id": course_id,
+                "course_title": title,
+            })
 
         return {
-            "answer": raw_answer,
+            "answer": answer,
             "debug": {
                 "model": getattr(self.llm, "model_identifier", "unknown"),
                 "prompt": f"system:\n{system_prompt}\n\nuser:\n{user_prompt}",
-                "context": full_text,
+                "context": context,
                 "raw_answer": raw_answer,
             },
-            "sources": self._format_sources(
-                source_docs,
-                course_titles=course_titles,
-                fallback_title=course_titles.get(course_id),
-            ),
+            "sources": sources,
         }
 
     def _answer_with_docs(self, question: str, docs: list[Document], multi_course: bool) -> dict:

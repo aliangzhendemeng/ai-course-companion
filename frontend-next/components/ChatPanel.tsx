@@ -207,9 +207,31 @@ function MessageBubble({
   onSeek?: (timestamp: number, courseId?: number) => void
 }) {
   const isUser = message.role === "user"
-  const groups = deduplicateSources(normalizeSources(message.sources))
-  // 当前选中的来源（点击高亮，便于和正文/时间点对应）
+  const sources = normalizeSources(message.sources)
+  const groups = deduplicateSources(sources)
+  // 正文 [N] 引用角标 ↔ 来源列表：sources 已按编号顺序（sources[N-1] 即 [N]）
   const [activeSource, setActiveSource] = useState<number | null>(null)
+  const sourceRefs = useRef<(HTMLLIElement | null)[]>([])
+
+  const jumpToSource = (num: number) => {
+    const idx = num - 1
+    if (idx < 0 || idx >= groups.length) return
+    setActiveSource(idx)
+    sourceRefs.current[idx]?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    const first = groups[idx].sources[0]
+    onSeek?.(groups[idx].timestamp, first.course_id || undefined)
+  }
+
+  const renderCitation = (num: number, key: string) => (
+    <button
+      key={key}
+      onClick={() => jumpToSource(num)}
+      className="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-primary/15 px-0.5 align-super text-[10px] font-semibold text-primary hover:bg-primary/30"
+      title={`跳转到来源 [${num}]`}
+    >
+      {num}
+    </button>
+  )
 
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
@@ -220,13 +242,20 @@ function MessageBubble({
             : "rounded-tl-sm border bg-background"
         }`}
       >
-        <MarkdownRenderer>{message.content}</MarkdownRenderer>
+        <MarkdownRenderer renderCitation={isUser ? undefined : renderCitation}>
+          {message.content}
+        </MarkdownRenderer>
         {!isUser && groups.length > 0 ? (
           <div className="mt-3 space-y-2">
             <p className="text-xs font-medium text-muted-foreground">参考来源（点击跳转到视频对应位置）</p>
             <ol className="flex flex-col gap-1.5">
               {groups.map((group, idx) => (
-                <li key={idx}>
+                <li
+                  key={idx}
+                  ref={(el) => {
+                    sourceRefs.current[idx] = el
+                  }}
+                >
                   <SourceChip
                     index={idx + 1}
                     group={group}
