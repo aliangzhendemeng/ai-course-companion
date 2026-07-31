@@ -38,9 +38,12 @@ def get_character(character_id: str):
 
 
 @router.get("/{character_id}/assets/{motion}")
-def get_motion_asset(character_id: str, motion: str):
-    """返回某角色某动作的形象素材（图片/GIF）。"""
-    path = CharacterService().get_asset_path(character_id, motion)
+def get_motion_asset(character_id: str, motion: str, index: int | None = None):
+    """返回某角色某动作的一张形象素材。
+
+    目录有多张图时：index 缺省随机返回一张（轮换播放）；index 指定则按序号取（取模）。
+    """
+    path = CharacterService().get_asset_path(character_id, motion, index)
     if not path:
         raise HTTPException(status_code=404, detail="素材不存在")
     return FileResponse(path)

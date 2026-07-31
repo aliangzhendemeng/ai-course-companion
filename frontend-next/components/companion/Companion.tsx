@@ -2,7 +2,7 @@
 
 // 咕咕嘎嘎学伴悬浮组件：右下角形象 + 情绪动作 + 口头禅气泡 + 角色切换。
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Volume2, VolumeX, RefreshCw } from "lucide-react"
 
 import { getCharacterAssetUrl } from "@/lib/api"
@@ -18,12 +18,19 @@ function pickMotion(mood: CompanionMood, motionAssets: Record<string, boolean>):
 export function Companion() {
   const { character, characters, mood, bubble, selectCharacter, speaking, stopSpeaking } = useCompanion()
   const [imgError, setImgError] = useState(false)
+  // 轮换序号：每次情绪变化 +1，附加到素材 URL，让后端重新随机选图（多张时轮换播放）
+  const [variant, setVariant] = useState(0)
+
+  useEffect(() => {
+    setVariant((v) => v + 1)
+    setImgError(false) // 换动作时重置错误，允许新图加载
+  }, [mood])
 
   if (!character) return null
 
   const motion = pickMotion(mood, character.motion_assets)
   const showImage = motion && !imgError
-  const assetUrl = motion ? getCharacterAssetUrl(character.id, motion) : null
+  const assetUrl = motion ? `${getCharacterAssetUrl(character.id, motion)}?v=${variant}` : null
 
   return (
     <div className="pointer-events-none fixed bottom-6 right-6 z-50 flex flex-col items-end gap-2">
