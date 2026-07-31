@@ -59,11 +59,15 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
 
     return (
       <div ref={containerRef} className={`group relative bg-black ${className ?? ""}`}>
+        {/* 隐藏原生全屏按钮（各浏览器伪元素不同），统一用右上角自定义控制 */}
+        <style>{`
+          .ggg-video::-webkit-media-controls-fullscreen-button { display: none !important; }
+        `}</style>
         <video
           ref={videoRef}
           controls
           controlsList="nofullscreen"
-          className="h-full w-full rounded-xl bg-black"
+          className="ggg-video h-full w-full rounded-xl bg-black"
           preload="metadata"
           crossOrigin="anonymous"
         >
