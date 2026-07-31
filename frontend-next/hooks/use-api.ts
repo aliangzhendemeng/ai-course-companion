@@ -344,10 +344,23 @@ export function useUpdateNote() {
 
 export function useDeleteNote() {
   const queryClient = useQueryClient()
-  return useMutation<void, Error, { noteId: number; courseId: number }>({
+  return useMutation<void, Error, { noteId: number; courseId: number }, { prev: Note[] | undefined }>({
     mutationFn: ({ noteId }) => deleteNote(noteId),
-    onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: noteKey(variables.courseId) })
+    // 乐观更新：点击立即从列表移除，避免"删了还在"的错觉
+    onMutate: async ({ noteId, courseId }) => {
+      await queryClient.cancelQueries({ queryKey: noteKey(courseId) })
+      const prev = queryClient.getQueryData<Note[]>(noteKey(courseId))
+      queryClient.setQueryData<Note[]>(noteKey(courseId), (old) =>
+        (old ?? []).filter((n) => n.id !== noteId)
+      )
+      return { prev }
+    },
+    onError: (_err, { courseId }, context) => {
+      // 失败回滚
+      if (context?.prev) queryClient.setQueryData(noteKey(courseId), context.prev)
+    },
+    onSettled: (_data, _err, { courseId }) => {
+      queryClient.invalidateQueries({ queryKey: noteKey(courseId) })
     },
   })
 }
