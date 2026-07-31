@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 
 from backend.ai.processor import VideoProcessor
 from backend.config import settings
@@ -193,6 +193,52 @@ def stream_course_video(course_id: int, request: Request):
         media_type=media_type,
         headers=headers,
     )
+
+
+def _format_vtt_time(seconds: float) -> str:
+    """秒 -> WebVTT 时间戳 HH:MM:SS.mmm。"""
+    if seconds < 0:
+        seconds = 0
+    ms = int(round((seconds - int(seconds)) * 1000))
+    total = int(seconds)
+    if ms == 1000:  # 进位（如 1.9995 -> 2.000）
+        total += 1
+        ms = 0
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}.{ms:03d}"
+
+
+@router.get("/{course_id}/subtitles")
+def get_course_subtitles(course_id: int):
+    """返回课程字幕（WebVTT 格式），供 <video><track> 显示。"""
+    from sqlmodel import select
+
+    from backend.database import engine
+    from backend.models import Transcript
+    from sqlmodel import Session
+
+    service = CourseService()
+    if not service.get_course(course_id):
+        raise HTTPException(status_code=404, detail="课程不存在")
+
+    with Session(engine) as session:
+        rows = session.exec(
+            select(Transcript)
+            .where(Transcript.course_id == course_id)
+            .order_by(Transcript.start_time)
+        ).all()
+
+    lines = ["WEBVTT", ""]
+    for t in rows:
+        text = (t.text or "").strip()
+        if not text:
+            continue
+        lines.append(f"{_format_vtt_time(t.start_time)} --> {_format_vtt_time(t.end_time)}")
+        lines.append(text)
+        lines.append("")
+    vtt = "\n".join(lines)
+    return Response(content=vtt, media_type="text/vtt; charset=utf-8")
 
 
 @router.delete("/{course_id}")

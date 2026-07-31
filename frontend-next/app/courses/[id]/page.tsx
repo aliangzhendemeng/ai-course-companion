@@ -14,6 +14,7 @@ import { QuizPanel } from "@/components/QuizPanel"
 import { FlashcardPanel } from "@/components/FlashcardPanel"
 import { NotesPanel } from "@/components/NotesPanel"
 import { useCourse, useSummary, useChatHistory, useAskQuestion } from "@/hooks/use-api"
+import { getSubtitlesUrl } from "@/lib/api"
 import { useCompanion } from "@/components/companion/CompanionContext"
 
 export default function CourseDetailPage() {
@@ -86,6 +87,7 @@ export default function CourseDetailPage() {
           <VideoPlayer
             ref={videoRef}
             src={course.video_url}
+            subtitlesUrl={getSubtitlesUrl(courseId)}
             className="aspect-video w-full overflow-hidden rounded-xl bg-black"
           />
           <div className="flex-1 rounded-xl border bg-card p-4 shadow-sm">

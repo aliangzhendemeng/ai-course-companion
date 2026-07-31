@@ -471,6 +471,11 @@ export function getCharacterAssetUrl(characterId: string, motion: string): strin
   return `${API_BASE}/api/characters/${characterId}/assets/${motion}`
 }
 
+/** 课程字幕 WebVTT URL */
+export function getSubtitlesUrl(courseId: number): string {
+  return `${API_BASE}/api/courses/${courseId}/subtitles`
+}
+
 /** TTS：文本转语音，返回音频 Blob（MP3），音色随角色 */
 export async function synthesizeSpeech(text: string, characterId?: string): Promise<Blob> {
   const response = await fetch(`${API_BASE}/api/characters/tts`, {
