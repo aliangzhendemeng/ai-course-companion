@@ -62,6 +62,7 @@ export const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
         <video
           ref={videoRef}
           controls
+          controlsList="nofullscreen"
           className="h-full w-full rounded-xl bg-black"
           preload="metadata"
           crossOrigin="anonymous"
