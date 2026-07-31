@@ -302,10 +302,7 @@ function SourceChip({
 }) {
   const first = group.sources[0]
   const label = group.courseTitle ? `${group.courseTitle} · ` : ""
-  const count = group.sources.length
   const time = formatTimestamp(group.timestamp)
-  // 对应文本预览（悬停可见，帮助判断该来源讲了什么）
-  const preview = group.sources.map((s) => s.text).filter(Boolean).join(" / ")
   return (
     <button
       onClick={() => onSeek?.(group.timestamp, first.course_id || undefined)}
@@ -314,12 +311,10 @@ function SourceChip({
           ? "border-primary bg-primary/10 text-primary"
           : "border-transparent bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
       }`}
-      title={preview ? `${time} · ${preview}` : time}
+      title={`跳转到 ${time}`}
     >
       <span className="shrink-0 font-semibold text-primary">[{index}]</span>
       <span className="shrink-0 font-medium">{label}{time}</span>
-      {preview && <span className="truncate opacity-70">{preview}</span>}
-      {count > 1 && <span className="shrink-0 text-[10px] opacity-80">({count}个来源)</span>}
     </button>
   )
 }

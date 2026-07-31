@@ -509,16 +509,19 @@ class RAGEngine:
 
         要求：
         1. 仅基于以上内容回答。
-        2. 每个论点、结论或要点之后，必须紧跟支撑它的内容所对应的时间标注，格式与上文一致，例如：……是基本概念[10:39]。有多个依据可并列 [10:39][14:04]。
-        3. 只引用上文真实出现过的时间，不要编造或修改时间。
-        4. 如果内容中没有答案，明确说明无法找到。
+        2. 每个论点、结论或要点之后，紧跟支撑它的内容所对应的时间标注，格式与上文一致，例如：……是基本概念[10:39]。
+        3. 每个论点后只标 1~2 个最相关的时间，不要堆砌 3 个以上；全文引用的不同时间点总数尽量控制在 8 个以内，只保留最关键的。
+        4. 只引用上文真实出现过的时间，不要编造或修改时间。
+        5. 如果内容中没有答案，明确说明无法找到。
         """
 
         raw_answer = self.llm.chat(system_prompt, user_prompt, max_tokens=1500)
 
         # 按"回答中引用的时间出现顺序"建立来源列表，并给每个引用分配稳定编号 [1][2]…
         # 这样正文 [N] 永远对应来源列表第 N 条，且每个来源都锚定到视频时间点。
-        cited_ts = self._cited_timestamps(raw_answer)
+        # 上限：来源最多 MAX_SOURCES 条，避免 LLM 宽泛连引导致来源爆炸。
+        MAX_SOURCES = 8
+        cited_ts = self._cited_timestamps(raw_answer)[:MAX_SOURCES]
         ts_to_idx = {ts: i + 1 for i, ts in enumerate(cited_ts)}
 
         def _repl(m: re.Match) -> str:
@@ -526,7 +529,8 @@ class RAGEngine:
                 sec = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
             else:
                 sec = int(m.group(1)) * 60 + int(m.group(2))
-            return f"[{ts_to_idx[sec]}]"
+            idx = ts_to_idx.get(sec)
+            return f"[{idx}]" if idx is not None else ""
 
         answer = re.sub(r"\[(\d+):(\d{2})(?::(\d{2}))?\]", _repl, raw_answer)
 
