@@ -35,7 +35,7 @@ def sample_course(db_engine):
 
 
 class MockRAGEngine:
-    def query(self, course_id: int, question: str) -> dict:
+    def query(self, course_id: int, question: str, history=None) -> dict:
         return {
             "answer": f"课程回答：{question}",
             "sources": [{"type": "transcript", "timestamp": 12.0, "text": "测试字幕", "course_id": course_id}],
@@ -47,7 +47,7 @@ class MockRAGEngine:
             },
         }
 
-    def query_all(self, question: str) -> dict:
+    def query_all(self, question: str, history=None) -> dict:
         return {
             "answer": f"全局回答：{question}",
             "sources": [{"type": "course_full_text", "timestamp": 0, "text": "课程全文", "course_id": 1}],
@@ -59,7 +59,7 @@ class MockRAGEngine:
             },
         }
 
-    def query_multiple(self, course_ids: list[int], question: str) -> dict:
+    def query_multiple(self, course_ids: list[int], question: str, history=None) -> dict:
         return {
             "answer": f"学习集回答：{question}",
             "sources": [

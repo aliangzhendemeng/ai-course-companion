@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input"
 import { CourseCard } from "@/components/CourseCard"
 import { UploadModal } from "@/components/UploadModal"
 import { StudySetStudyPanel } from "@/components/StudySetStudyPanel"
+import { StreakCard } from "@/components/StreakCard"
+import { DashboardPanel } from "@/components/DashboardPanel"
 import { useCourses, useUploadCourse, useDeleteCourse, useReprocessCourse } from "@/hooks/use-api"
 import type { Course } from "@/lib/api"
 
@@ -51,7 +53,7 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
   }
 
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto p-6 pb-40">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">课程库</h1>
@@ -69,6 +71,14 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
             上传课程
           </Button>
         </UploadModal>
+      </div>
+
+      <div className="mb-6">
+        <StreakCard />
+      </div>
+
+      <div className="mb-6">
+        <DashboardPanel />
       </div>
 
       <div className="mb-6 flex items-center gap-3">

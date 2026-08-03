@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ArrowLeft, Loader2, Stethoscope } from "lucide-react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
@@ -13,7 +13,16 @@ import { ChatPanel } from "@/components/ChatPanel"
 import { QuizPanel } from "@/components/QuizPanel"
 import { FlashcardPanel } from "@/components/FlashcardPanel"
 import { NotesPanel } from "@/components/NotesPanel"
-import { useCourse, useSummary, useChatHistory, useAskQuestion } from "@/hooks/use-api"
+import { SegmentSummary } from "@/components/SegmentSummary"
+import { ChaptersPanel } from "@/components/ChaptersPanel"
+import { ConversationSwitcher } from "@/components/ConversationSwitcher"
+import {
+  useCourse,
+  useSummary,
+  useAskQuestion,
+  useConversationMessages,
+  useConversations,
+} from "@/hooks/use-api"
 import { getSubtitlesUrl } from "@/lib/api"
 import { useCompanion } from "@/components/companion/CompanionContext"
 
@@ -25,9 +34,21 @@ export default function CourseDetailPage() {
 
   const { data: course, isLoading: courseLoading } = useCourse(courseId)
   const { data: summary, isLoading: summaryLoading } = useSummary(courseId)
-  const { data: history, isLoading: historyLoading } = useChatHistory(courseId)
   const askMutation = useAskQuestion()
   const { react } = useCompanion()
+
+  // 会话制：当前会话 id（null = 新会话）
+  const [activeConvId, setActiveConvId] = useState<number | null>(null)
+  const { data: conversations } = useConversations(courseId)
+  const { data: convMessages, isLoading: convLoading } = useConversationMessages(activeConvId)
+
+  // 进入课程/会话列表就绪时，默认选最近一个会话
+  useEffect(() => {
+    if (activeConvId === null && conversations && conversations.length > 0) {
+      setActiveConvId(conversations[0].id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversations])
 
   // 进入课程页，学伴打招呼（仅文字气泡，不语音打扰）
   useEffect(() => {
@@ -42,6 +63,8 @@ export default function CourseDetailPage() {
     }
     videoRef.current?.seek(timestamp)
   }
+
+  const currentConv = conversations?.find((c) => c.id === activeConvId)
 
   if (courseLoading) {
     return (
@@ -90,6 +113,7 @@ export default function CourseDetailPage() {
             subtitlesUrl={getSubtitlesUrl(courseId)}
             className="aspect-video w-full overflow-hidden rounded-xl bg-black"
           />
+          <SegmentSummary courseId={courseId} getCurrentTime={() => videoRef.current?.getCurrentTime() ?? 0} />
           <div className="flex-1 rounded-xl border bg-card p-4 shadow-sm">
             <Tabs defaultValue="summary" className="flex h-full flex-col">
               <TabsList className="grid w-full grid-cols-4">
@@ -99,7 +123,10 @@ export default function CourseDetailPage() {
                 <TabsTrigger value="notes">笔记</TabsTrigger>
               </TabsList>
               <TabsContent value="summary" className="mt-4 flex-1">
-                <SummaryTabs summary={summary} isLoading={summaryLoading} onSeek={handleSeek} />
+                <div className="space-y-4">
+                  <SummaryTabs summary={summary} isLoading={summaryLoading} onSeek={handleSeek} />
+                  <ChaptersPanel courseId={courseId} onSeek={handleSeek} />
+                </div>
               </TabsContent>
               <TabsContent value="quiz" className="mt-4 flex-1">
                 <QuizPanel scope={{ courseId }} onSeek={handleSeek} />
@@ -118,16 +145,37 @@ export default function CourseDetailPage() {
           </div>
         </div>
 
-        <div className="lg:col-span-2">
-          <ChatPanel
-            courseId={courseId}
-            messages={history || []}
-            isLoading={historyLoading || askMutation.isPending}
-            onSend={(question, scope, courseIds) =>
-              askMutation.mutate({ courseId, question, scope, courseIds })
-            }
-            onSeek={handleSeek}
-          />
+        <div className="flex flex-col gap-2 pb-40 lg:col-span-2">
+          <ConversationSwitcher courseId={courseId} activeId={activeConvId} onSelect={setActiveConvId} />
+          <div className="min-h-0 flex-1">
+            <ChatPanel
+              courseId={courseId}
+              messages={convMessages ?? []}
+              isLoading={convLoading || askMutation.isPending}
+              sessionMode
+              title={currentConv?.title ?? "新对话"}
+              onSend={(question, _scope, _courseIds, image) =>
+                askMutation.mutate(
+                  {
+                    courseId,
+                    question,
+                    scope: "course",
+                    image,
+                    conversationId: activeConvId ?? undefined,
+                  },
+                  {
+                    onSuccess: (data) => {
+                      // 首次提问创建了新会话，切换到它
+                      if (activeConvId === null && data.conversation_id) {
+                        setActiveConvId(data.conversation_id)
+                      }
+                    },
+                  }
+                )
+              }
+              onSeek={handleSeek}
+            />
+          </div>
         </div>
       </div>
     </div>

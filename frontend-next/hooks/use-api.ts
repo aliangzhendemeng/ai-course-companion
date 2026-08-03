@@ -40,6 +40,14 @@ import {
   setFlashcardFamiliarity,
   clearFlashcards,
   listCharacters,
+  getStudyStats,
+  getDashboard,
+  summarizeSegment,
+  getChapters,
+  listConversations,
+  getConversationMessages,
+  renameConversation,
+  deleteConversation,
   listNotes,
   createNote,
   updateNote,
@@ -69,6 +77,11 @@ import {
   type Character,
   type Note,
   type NoteKind,
+  type StudyStats,
+  type Dashboard,
+  type SegmentSummary,
+  type Chapter,
+  type Conversation,
 } from "@/lib/api"
 
 export function useCourses(options?: Partial<UseQueryOptions<Course[], Error>>) {
@@ -139,10 +152,54 @@ export function useReprocessCourse() {
 
 export function useAskQuestion() {
   const queryClient = useQueryClient()
-  return useMutation<ChatResponse, Error, { courseId: number; question: string; scope: ChatScope; courseIds?: number[] }>({
-    mutationFn: ({ courseId, question, scope, courseIds }) => askQuestion(courseId, question, scope, courseIds),
-    onSuccess: (_, variables) => {
+  return useMutation<ChatResponse, Error, { courseId: number; question: string; scope: ChatScope; courseIds?: number[]; image?: string; conversationId?: number }>({
+    mutationFn: ({ courseId, question, scope, courseIds, image, conversationId }) => askQuestion(courseId, question, scope, courseIds, image, conversationId),
+    onSuccess: (data, variables) => {
+      // 失效当前会话消息 + 该课程会话列表 + 全局历史
+      if (data.conversation_id) {
+        queryClient.invalidateQueries({ queryKey: ["conversation", data.conversation_id] })
+      }
+      queryClient.invalidateQueries({ queryKey: ["conversations", variables.courseId] })
       queryClient.invalidateQueries({ queryKey: ["chat", variables.courseId, "history"] })
+      queryClient.invalidateQueries({ queryKey: ["history"] })
+    },
+  })
+}
+
+// ---- 会话（Conversation）----
+
+export function useConversations(courseId: number) {
+  return useQuery<Conversation[], Error>({
+    queryKey: ["conversations", courseId],
+    queryFn: () => listConversations(courseId),
+    staleTime: 30 * 1000,
+  })
+}
+
+export function useConversationMessages(conversationId: number | null) {
+  return useQuery<ChatMessage[], Error>({
+    queryKey: ["conversation", conversationId],
+    queryFn: () => getConversationMessages(conversationId as number),
+    enabled: conversationId !== null,
+  })
+}
+
+export function useRenameConversation() {
+  const queryClient = useQueryClient()
+  return useMutation<Conversation, Error, { conversationId: number; courseId: number; title: string }>({
+    mutationFn: ({ conversationId, title }) => renameConversation(conversationId, title),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["conversations", variables.courseId] })
+    },
+  })
+}
+
+export function useDeleteConversation() {
+  const queryClient = useQueryClient()
+  return useMutation<void, Error, { conversationId: number; courseId: number }>({
+    mutationFn: ({ conversationId }) => deleteConversation(conversationId),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["conversations", variables.courseId] })
       queryClient.invalidateQueries({ queryKey: ["history"] })
     },
   })
@@ -444,5 +501,45 @@ export function useChatDebug(messageId: number | null, options?: Partial<UseQuer
     queryFn: () => getChatDebug(messageId as number),
     enabled: messageId !== null,
     ...options,
+  })
+}
+
+// ---- 学习打卡统计 ----
+
+export function useStudyStats() {
+  return useQuery<StudyStats, Error>({
+    queryKey: ["study-stats"],
+    queryFn: () => getStudyStats(),
+    // 学习行为发生后刷新（5 分钟也兜底一次）
+    refetchOnWindowFocus: true,
+    staleTime: 60 * 1000,
+  })
+}
+
+// ---- 掌握度仪表盘 ----
+
+export function useDashboard() {
+  return useQuery<Dashboard, Error>({
+    queryKey: ["dashboard"],
+    queryFn: () => getDashboard(),
+    staleTime: 60 * 1000,
+  })
+}
+
+// ---- 时间段总结 ----
+
+export function useSummarizeSegment() {
+  return useMutation<SegmentSummary, Error, { courseId: number; start: number; end: number }>({
+    mutationFn: ({ courseId, start, end }) => summarizeSegment(courseId, start, end),
+  })
+}
+
+// ---- 本章节速览 ----
+
+export function useChapters(courseId: number) {
+  return useQuery<Chapter[], Error>({
+    queryKey: ["chapters", courseId],
+    queryFn: () => getChapters(courseId),
+    staleTime: 5 * 60 * 1000,
   })
 }

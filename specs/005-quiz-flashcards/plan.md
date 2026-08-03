@@ -102,11 +102,22 @@ frontend-next/
 - 课程页加入口；学习集出题复用（范围参数：course_id 或 study_set_id）
 - 端到端：生成→作答/翻卡→判分/标记→来源跳转→追加与清空→统计持久化
 
+### Phase 5: 第二迭代续 — 学习增强功能（T022-T028）
+
+- **导出(F)**：`ExportService` 复用 FlashcardService/QuizService 查询，闪卡出 Markdown（按熟悉度分组）/Anki TSV，错题出 Markdown；前端 `downloadExport` 直接触发浏览器下载
+- **打卡(H)**：`StudyStatsService` 零侵入聚合 ChatMessage/QuestionAttempt/Note/Flashcard 的 created_at 日期算 streak（含一天宽限），不新增打卡表
+- **仪表盘(A)**：`DashboardService` 全局聚合测验正确率/闪卡熟悉度/错题掌握度/笔记/课程数
+- **时间段总结(#2)**：`SegmentSummaryService` 按 [start,end] 过滤 Transcript/Frame，LLM 要点总结；复用课程页 videoRef.getCurrentTime 取当前时间
+- **图片询问(#6)**：`ChatService` 加 image 分支——视觉模型描述图片 + chat LLM 结合问题回答，不走 RAG、不要求课程已完成；前端 ChatPanel 图片转 base64 data url 上传
+- **章节速览(#4)**：`Chapter` 表 + `ChapterService` 按时间窗口分章（3-12 章）、LLM 批量生成标题/速览、首次生成缓存到库；容错 JSON 提取（括号平衡，处理转义/字符串内括号）
+- 验证：后端 pytest 109 项全过（新增 38）、前端 tsc 通过、运行中后端真实接口 curl 验证
+
 ## 架构预留（后续迭代，本 plan 不实现）
 
 - Question/Flashcard 已含 `source_timestamp`、`source_course_id`，供学伴/错题本/掌握度复用
 - 学伴角色系统（meta.json/素材隔离）与测验判分钩子（答对/答错动作）在第二迭代接入
 - 错题本只需按"作答记录的错误题"查询，Question 增加 Attempt 关联即可（第二迭代）
+- 数字人形象、画图、网络查询、视频链接导入 → 006
 
 ## Complexity Tracking
 

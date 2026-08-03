@@ -57,6 +57,8 @@ class ChatRequest(BaseModel):
     question: str
     scope: str = "course"  # "course" | "all" | "set"
     course_ids: list[int] | None = None  # scope="set" 时指定的课程集合
+    image: str | None = None  # 上传图片（base64 data url），有图走视觉问答
+    conversation_id: int | None = None  # 续写某会话；不传则新建
 
 
 class ChatResponse(BaseModel):
@@ -64,6 +66,21 @@ class ChatResponse(BaseModel):
     answer: str
     sources: list[Source] | None
     answer_message_id: int | None = None
+    conversation_id: int | None = None  # 本次问答所属会话（新建或续写）
+
+
+class ConversationItem(BaseModel):
+    id: int
+    course_id: int
+    title: str
+    scope: str
+    course_ids: list[int] = []
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationRenameRequest(BaseModel):
+    title: str
 
 
 class StudySetCreate(BaseModel):

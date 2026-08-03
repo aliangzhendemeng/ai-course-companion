@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from sqlmodel import Session, select
 
 from backend.database import engine
-from backend.models import ChatMessage, Course
+from backend.models import ChatMessage, Conversation, Course
 
 router = APIRouter()
 
@@ -24,11 +24,12 @@ def _to_utc_iso(dt) -> str:
 
 @router.get("")
 def list_history():
-    """列出所有问答历史，按时间倒序。"""
+    """列出所有问答历史，按时间倒序（带会话分组信息）。"""
     with Session(engine) as session:
         statement = (
-            select(ChatMessage, Course.title)
+            select(ChatMessage, Course.title, Conversation.title)
             .join(Course, ChatMessage.course_id == Course.id)
+            .outerjoin(Conversation, ChatMessage.conversation_id == Conversation.id)
             .order_by(ChatMessage.created_at.desc())
         )
         results = session.exec(statement).all()
@@ -37,7 +38,7 @@ def list_history():
         titles = {c.id: c.title for c in session.exec(select(Course)).all()}
 
         items = []
-        for msg, anchor_title in results:
+        for msg, anchor_title, conv_title in results:
             involved_ids: list[int] = []
             if msg.course_ids:
                 try:
@@ -56,6 +57,8 @@ def list_history():
                     "scope": msg.scope,
                     "sources": msg.sources,
                     "created_at": _to_utc_iso(msg.created_at),
+                    "conversation_id": msg.conversation_id,
+                    "conversation_title": conv_title,
                 }
             )
         return items

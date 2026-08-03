@@ -73,6 +73,20 @@
 
 ---
 
+## Phase 5: 第二迭代续 — 掌握度/导出/打卡/时间段总结/图片询问/章节速览
+
+**Purpose**: 收尾 005 第二迭代剩余功能 + 用户新增的 4 个学习增强功能
+
+- [x] T022 闪卡/错题导出（`backend/services/export_service.py` + `/api/export`）：闪卡 Markdown（按熟悉度分组）/ Anki TSV；错题 Markdown（题目/正确答案/解析/来源）。前端 FlashcardPanel、QuizPanel 错题本加导出入口（`downloadExport`）
+- [x] T023 学习 streak 打卡（`backend/services/study_stats_service.py` + `/api/study-stats`）：零侵入聚合问答/做题/笔记/闪卡的 created_at 日期，算连续天数（含一天宽限）；前端 StreakCard（连续/累计天数 + 30 天热力图）放课程库页
+- [x] T024 掌握度仪表盘（`backend/services/dashboard_service.py` + `/api/dashboard`）：聚合测验正确率、闪卡熟悉度、错题掌握度、笔记数、已完成课程数；前端 DashboardPanel（统计卡 + 进度条）放课程库页
+- [x] T025 时间段总结（`backend/services/segment_service.py` + `/api/segment/summarize`）：取视频某时间区间内字幕/课件，LLM 要点总结；前端 SegmentSummary（当前时间 ±2/3/5 分钟）放课程页视频下方
+- [x] T026 上传图片询问（`ChatService` 加 image 分支 + `ChatRequest.image`）：图片→视觉模型描述→结合问题由 chat LLM 回答，不走 RAG、不要求课程已完成；前端 ChatPanel 加图片上传（base64 data url，预览/移除）
+- [x] T027 本章节速览（`Chapter` 模型 + `backend/services/chapter_service.py` + `/api/courses/{id}/chapters`）：按时间窗口自动分章（3-12 章）、AI 批量生成标题/速览、首次生成缓存到库；前端 ChaptersPanel 放课程页总结 Tab，点击跳转视频
+- [x] T028 端到端验证：后端 pytest 全过（109 项，新增 38）、前端 tsc 通过、运行中后端真实接口（study-stats/dashboard/export）curl 验证通过
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

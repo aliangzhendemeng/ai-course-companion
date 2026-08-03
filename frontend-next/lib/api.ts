@@ -45,6 +45,7 @@ export interface ChatMessage {
   sources?: Source[] | null
   created_at?: string
   course_id?: number
+  conversation_id?: number
 }
 
 export interface ChatResponse {
@@ -52,6 +53,7 @@ export interface ChatResponse {
   answer: string
   sources: Source[] | null
   answer_message_id?: number
+  conversation_id?: number
 }
 
 export interface Settings {
@@ -79,6 +81,8 @@ export interface HistoryItem {
   /** set/all 实际涉及的课程 id 与名称（优先于锚点 course_title 显示） */
   course_ids?: number[]
   course_titles?: string[]
+  conversation_id?: number
+  conversation_title?: string
 }
 
 export interface TranscriptDebug {
@@ -166,12 +170,52 @@ export async function askQuestion(
   question: string,
   scope: ChatScope,
   courseIds?: number[],
+  image?: string,
+  conversationId?: number,
 ): Promise<ChatResponse> {
   return request<ChatResponse>(`/api/chat/${courseId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, scope, course_ids: courseIds ?? null }),
+    body: JSON.stringify({
+      question,
+      scope,
+      course_ids: courseIds ?? null,
+      image: image ?? null,
+      conversation_id: conversationId ?? null,
+    }),
   })
+}
+
+// ---- 会话（Conversation）----
+
+export interface Conversation {
+  id: number
+  course_id: number
+  title: string
+  scope: ChatScope
+  course_ids: number[]
+  created_at: string
+  updated_at: string
+}
+
+export async function listConversations(courseId: number): Promise<Conversation[]> {
+  return request<Conversation[]>(`/api/courses/${courseId}/conversations`)
+}
+
+export async function getConversationMessages(conversationId: number): Promise<ChatMessage[]> {
+  return request<ChatMessage[]>(`/api/conversations/${conversationId}/messages`)
+}
+
+export async function renameConversation(conversationId: number, title: string): Promise<Conversation> {
+  return request<Conversation>(`/api/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  })
+}
+
+export async function deleteConversation(conversationId: number): Promise<void> {
+  await request(`/api/conversations/${conversationId}`, { method: "DELETE" })
 }
 
 // ---- 学习集（自定义课程组合）----
@@ -474,6 +518,89 @@ export function getCharacterAssetUrl(characterId: string, motion: string): strin
 /** 课程字幕 WebVTT URL */
 export function getSubtitlesUrl(courseId: number): string {
   return `${API_BASE}/api/courses/${courseId}/subtitles`
+}
+
+// ---- 导出（Export）----
+
+export type ExportKind = "flashcards" | "wrong-questions"
+
+/** 导出文件下载 URL（浏览器直接下载） */
+export function getExportUrl(kind: ExportKind, scope: QuizScope, format: string): string {
+  return `${API_BASE}/api/export/${kind}?${scopeQuery(scope)}&format=${format}`
+}
+
+/** 触发浏览器下载导出文件 */
+export function downloadExport(kind: ExportKind, scope: QuizScope, format: string, filename: string): void {
+  const a = document.createElement("a")
+  a.href = getExportUrl(kind, scope, format)
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
+// ---- 学习打卡统计（Streak）----
+
+export interface StudyStats {
+  streak: number
+  total_days: number
+  today_active: boolean
+  /** 最近 30 天有学习活动的日期（ISO yyyy-mm-dd） */
+  recent: string[]
+}
+
+export async function getStudyStats(): Promise<StudyStats> {
+  return request<StudyStats>("/api/study-stats")
+}
+
+// ---- 掌握度仪表盘（Dashboard）----
+
+export interface Dashboard {
+  quiz: { total_attempts: number; correct: number; accuracy: number }
+  flashcards: { total: number; known: number; fuzzy: number; unknown: number }
+  wrong: { total: number; unmastered: number; mastered: number }
+  notes: number
+  courses_completed: number
+}
+
+export async function getDashboard(): Promise<Dashboard> {
+  return request<Dashboard>("/api/dashboard")
+}
+
+// ---- 时间段总结（Segment Summary）----
+
+export interface SegmentSummary {
+  summary: string
+  start: number
+  end: number
+  segment_count: number
+}
+
+export async function summarizeSegment(
+  courseId: number,
+  start: number,
+  end: number
+): Promise<SegmentSummary> {
+  return request<SegmentSummary>("/api/segment/summarize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ course_id: courseId, start, end }),
+  })
+}
+
+// ---- 本章节速览（Chapters）----
+
+export interface Chapter {
+  id: number
+  index: number
+  title: string
+  summary: string
+  start_time: number
+  end_time: number
+}
+
+export async function getChapters(courseId: number): Promise<Chapter[]> {
+  return request<Chapter[]>(`/api/courses/${courseId}/chapters`)
 }
 
 /** TTS：文本转语音，返回音频 Blob（MP3），音色随角色 */

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import {
   ChevronLeft,
   ChevronRight,
+  Download,
   Loader2,
   PlayCircle,
   RefreshCw,
@@ -21,6 +22,7 @@ import {
 } from "@/hooks/use-api"
 import { formatTimestamp } from "@/lib/timestamp"
 import type { Familiarity, Flashcard, QuizScope } from "@/lib/api"
+import { downloadExport } from "@/lib/api"
 
 interface FlashcardPanelProps {
   scope: QuizScope
@@ -101,10 +103,29 @@ export function FlashcardPanel({ scope, onSeek }: FlashcardPanelProps) {
         </p>
         <div className="flex items-center gap-2">
           {all.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={() => clearMutation.mutate(scope)} disabled={busy} title="清空当前闪卡">
-              <Trash2 className="mr-1 h-4 w-4" />
-              清空
-            </Button>
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => downloadExport("flashcards", scope, "md", "flashcards.md")}
+                title="导出为 Markdown"
+              >
+                <Download className="mr-1 h-4 w-4" />
+                导出
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => downloadExport("flashcards", scope, "anki", "flashcards-anki.txt")}
+                title="导出为 Anki 可导入的 TSV"
+              >
+                Anki
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => clearMutation.mutate(scope)} disabled={busy} title="清空当前闪卡">
+                <Trash2 className="mr-1 h-4 w-4" />
+                清空
+              </Button>
+            </>
           )}
           <Button size="sm" onClick={() => generateMutation.mutate({ scope })} disabled={busy}>
             {generateMutation.isPending ? (

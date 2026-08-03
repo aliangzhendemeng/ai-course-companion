@@ -403,19 +403,30 @@ class RAGEngine:
             return 0.0
         return len(set_a & set_b) / min(len(set_a), len(set_b))
 
-    def query(self, course_id: int, question: str) -> dict:
+    @staticmethod
+    def _format_history(history: list[tuple[str, str]] | None) -> str:
+        """把多轮对话历史格式化为 prompt 片段（最近 6 条）。"""
+        if not history:
+            return ""
+        lines = ["之前的对话（仅供理解上下文，回答仍以下方课程内容为准）："]
+        for role, content in history[-6:]:
+            who = "用户" if role == "user" else "助教"
+            lines.append(f"{who}：{(content or '')[:300]}")
+        return "\n".join(lines) + "\n\n"
+
+    def query(self, course_id: int, question: str, history: list[tuple[str, str]] | None = None) -> dict:
         """基于课程内容回答问题（单课程）。
 
         优先使用完整清洗文本；如果文本过长，则回退到 RAG 片段。
         """
         full_text = self._load_course_full_text(course_id)
         if full_text and len(full_text) <= self.FULL_TEXT_MAX_CHARS:
-            return self._query_with_full_text(question, full_text, course_id)
+            return self._query_with_full_text(question, full_text, course_id, history=history)
 
         # 回退：课程无内容或过长，使用 RAG 片段
         collection_name = self._get_collection_name(course_id)
         docs = self._retrieve(collection_name, collection_name, question)
-        return self._answer_with_docs(question, docs, multi_course=False)
+        return self._answer_with_docs(question, docs, multi_course=False, history=history)
 
     def _load_course_full_text(self, course_id: int) -> str:
         """从数据库加载一门课的完整清洗文本（字幕 + OCR，按时间排序）。"""
@@ -464,7 +475,7 @@ class RAGEngine:
                 seen.append(sec)
         return seen
 
-    def _query_with_full_text(self, question: str, full_text: str, course_id: int) -> dict:
+    def _query_with_full_text(self, question: str, full_text: str, course_id: int, history: list[tuple[str, str]] | None = None) -> dict:
         """使用完整课程文本回答，正文论点标注 [N]，编号与来源严格对应。
 
         关键：给每段标注时间 [MM:SS] 并要求 LLM 在论点后引用该时间；再把每个被引用的
@@ -501,7 +512,7 @@ class RAGEngine:
             "如果内容中没有包含问题的答案，请明确告诉用户'根据现有课程内容，无法找到答案'，不要编造。"
         )
         user_prompt = f"""
-        以下是课程内容，每段开头标注了它在视频中的时间：
+        {self._format_history(history)}以下是课程内容，每段开头标注了它在视频中的时间：
 
         {context}
 
@@ -560,8 +571,9 @@ class RAGEngine:
             "sources": sources,
         }
 
-    def _answer_with_docs(self, question: str, docs: list[Document], multi_course: bool) -> dict:
+    def _answer_with_docs(self, question: str, docs: list[Document], multi_course: bool, history: list[tuple[str, str]] | None = None) -> dict:
         """使用 RAG 检索到的片段回答。"""
+        hist = self._format_history(history)
         context_parts = []
         for i, doc in enumerate(docs, 1):
             context_parts.append(f"[{i}] {doc.page_content}")
@@ -574,7 +586,7 @@ class RAGEngine:
                 "回答时尽量引用相关片段的编号，并说明来自哪门课程。"
             )
             user_prompt = f"""
-            以下是多门课程的内容片段，按相关性排序：
+            {hist}以下是多门课程的内容片段，按相关性排序：
 
             {context}
 
@@ -592,7 +604,7 @@ class RAGEngine:
                 "回答时尽量引用相关片段的编号。"
             )
             user_prompt = f"""
-            以下是课程内容片段，按相关性排序：
+            {hist}以下是课程内容片段，按相关性排序：
 
             {context}
 
@@ -620,11 +632,11 @@ class RAGEngine:
             "sources": self._format_sources(docs, course_titles=course_titles),
         }
 
-    def query_all(self, question: str) -> dict:
+    def query_all(self, question: str, history: list[tuple[str, str]] | None = None) -> dict:
         """基于所有课程内容回答问题（全局搜索）。"""
-        return self._query_across_courses(question, course_filter=None)
+        return self._query_across_courses(question, course_filter=None, history=history)
 
-    def query_multiple(self, course_ids: list[int], question: str) -> dict:
+    def query_multiple(self, course_ids: list[int], question: str, history: list[tuple[str, str]] | None = None) -> dict:
         """基于指定的若干门课程回答问题（学习集/多课程范围）。
 
         与 query_all 的区别：检索与全文拼接都限制在 course_ids 范围内，
@@ -636,9 +648,9 @@ class RAGEngine:
                 "debug": {"model": getattr(self.llm, "model_identifier", "unknown"), "prompt": "", "context": "", "raw_answer": ""},
                 "sources": [],
             }
-        return self._query_across_courses(question, course_filter=course_ids)
+        return self._query_across_courses(question, course_filter=course_ids, history=history)
 
-    def _query_across_courses(self, question: str, course_filter: list[int] | None) -> dict:
+    def _query_across_courses(self, question: str, course_filter: list[int] | None, history: list[tuple[str, str]] | None = None) -> dict:
         """跨课程回答核心：先全局检索定位相关课程，再拼接这些课的完整文本回答。
 
         course_filter 为 None 表示全部课程；否则限定在指定课程集合内。
@@ -655,7 +667,7 @@ class RAGEngine:
                 seen.add(cid)
 
         if not course_ids:
-            return self._answer_with_docs(question, docs, multi_course=True)
+            return self._answer_with_docs(question, docs, multi_course=True, history=history)
 
         # 取前 N 门相关课程，避免上下文爆炸
         course_ids = course_ids[:3]
@@ -669,7 +681,7 @@ class RAGEngine:
             context_parts.append(f"===== {title} =====\n{full_text}")
 
         if not context_parts:
-            return self._answer_with_docs(question, docs, multi_course=True)
+            return self._answer_with_docs(question, docs, multi_course=True, history=history)
 
         context = "\n\n".join(context_parts)
         system_prompt = (
@@ -677,7 +689,7 @@ class RAGEngine:
             "如果内容中没有包含问题的答案，请明确告诉用户'根据现有课程内容，无法找到答案'，不要编造。"
         )
         user_prompt = f"""
-        以下是多门课程的完整内容：
+        {self._format_history(history)}以下是多门课程的完整内容：
 
         {context}
 

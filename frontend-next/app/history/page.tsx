@@ -1,85 +1,73 @@
 "use client"
 
-import { Loader2, Inbox } from "lucide-react"
+import { useMemo } from "react"
+import { Loader2, Inbox, Trash2, MessageSquare } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { HistoryCard, type QAPair } from "@/components/HistoryCard"
-import { useChatHistoryAll, useDeleteChatHistory } from "@/hooks/use-api"
-import type { HistoryItem } from "@/lib/api"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { MarkdownRenderer } from "@/components/MarkdownRenderer"
+import { useChatHistoryAll, useDeleteConversation } from "@/hooks/use-api"
+import { deduplicateSources, formatTimestamp } from "@/lib/timestamp"
+import type { HistoryItem, Source, ChatScope } from "@/lib/api"
 
-/** 把按时间倒序的消息列表配对成 Q&A（用户问题 + 助手回答）。
- *
- * 必须先按"对话上下文"（同一课程/同一组课程）分组再配对：
- * 不同课程的问答在时间上交错，若全局混排，一门课的 user 后面紧跟的可能是
- * 另一门课的消息，导致 user 找不到自己的 assistant，误显示"无回答记录"。
- */
-function contextKey(m: HistoryItem): string {
-  // set/all 用实际涉及的课程集合做 key；course 用锚点课程 id
-  if (m.course_ids && m.course_ids.length > 0) {
-    return "set:" + [...m.course_ids].sort((a, b) => a - b).join(",")
-  }
-  return `course:${m.course_id}`
+interface ConvGroup {
+  key: string
+  convId: number | null
+  title: string
+  courseTitle: string
+  courseId: number
+  scope: ChatScope
+  messages: HistoryItem[]
+  latest: number
 }
 
-function pairMessages(messages: HistoryItem[]): QAPair[] {
-  // 1) 按对话上下文分组（保持各组内时间升序）
-  const groups = new Map<string, HistoryItem[]>()
-  const asc = [...messages].sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  )
-  for (const m of asc) {
-    const key = contextKey(m)
-    if (!groups.has(key)) groups.set(key, [])
-    groups.get(key)!.push(m)
+/** 按会话分组（conversation_id），未分组的孤立消息各自成组。 */
+function groupByConversation(messages: HistoryItem[]): ConvGroup[] {
+  const map = new Map<string, HistoryItem[]>()
+  for (const m of messages) {
+    const key = m.conversation_id != null ? `c${m.conversation_id}` : `n${m.id}`
+    if (!map.has(key)) map.set(key, [])
+    map.get(key)!.push(m)
   }
-
-  // 2) 各组内把 user 与紧随的 assistant 配对
-  const pairs: QAPair[] = []
-  for (const msgs of Array.from(groups.values())) {
-    for (let i = 0; i < msgs.length; i++) {
-      const cur = msgs[i]
-      const next = msgs[i + 1]
-      if (cur.role === "user" && next && next.role === "assistant") {
-        pairs.push({ question: cur, answer: next })
-        i++
-      } else if (cur.role === "assistant") {
-        pairs.push({ answer: cur })
-      } else {
-        pairs.push({ question: cur })
-      }
-    }
+  const groups: ConvGroup[] = []
+  for (const [key, msgs] of Array.from(map)) {
+    const sorted = [...msgs].sort((a, b) => a.id - b.id)
+    const first = sorted[0]
+    const firstUser = sorted.find((m) => m.role === "user")
+    groups.push({
+      key,
+      convId: first.conversation_id ?? null,
+      title: first.conversation_title || firstUser?.content.slice(0, 24) || "未命名会话",
+      courseTitle: first.course_titles?.[0] || first.course_title || "",
+      courseId: first.course_id,
+      scope: first.scope,
+      messages: sorted,
+      latest: new Date(sorted[sorted.length - 1].created_at).getTime(),
+    })
   }
+  return groups.sort((a, b) => b.latest - a.latest)
+}
 
-  // 3) 按时间倒序，最新在最上（用每组回答/问题的时间）
-  const timeOf = (p: QAPair) =>
-    new Date((p.answer ?? p.question)!.created_at).getTime()
-  return pairs.sort((a, b) => timeOf(b) - timeOf(a))
+const SCOPE_LABEL: Record<ChatScope, string> = {
+  course: "课程问答",
+  set: "学习集",
+  all: "全局搜索",
 }
 
 export default function HistoryPage() {
   const router = useRouter()
   const { data: history, isLoading } = useChatHistoryAll()
-  const deleteMutation = useDeleteChatHistory()
+  const deleteMut = useDeleteConversation()
 
-  const pairs = history ? pairMessages(history) : []
-
-  const handleDelete = (id: number) => {
-    deleteMutation.mutate(id)
-  }
-
-  const handleDebug = (id: number) => {
-    const item = history?.find((h) => h.id === id)
-    if (item?.course_id) {
-      router.push(`/courses/${item.course_id}/debug?message=${id}`)
-    }
-  }
+  const groups = useMemo(() => (history ? groupByConversation(history) : []), [history])
 
   return (
     <div className="container mx-auto flex h-[calc(100vh-1rem)] flex-col p-4">
       <div className="mb-4 flex items-center justify-between">
         <h1 className="text-xl font-bold">问答历史</h1>
-        <p className="text-sm text-muted-foreground">共 {pairs.length} 组问答</p>
+        <p className="text-sm text-muted-foreground">共 {groups.length} 个会话</p>
       </div>
 
       {isLoading ? (
@@ -88,29 +76,121 @@ export default function HistoryPage() {
         </div>
       ) : (
         <ScrollArea className="flex-1 pr-2">
-          <div className="space-y-4 pb-4">
-            {pairs.length > 0 ? (
-              pairs.map((pair, idx) => {
-                const key =
-                  (pair.question?.id ?? "q") + "-" + (pair.answer?.id ?? "a") + "-" + idx
-                return (
-                  <HistoryCard
-                    key={key}
-                    pair={pair}
-                    onDelete={handleDelete}
-                    onDebug={pair.answer ? handleDebug : undefined}
-                  />
-                )
-              })
-            ) : (
+          <div className="space-y-4 pb-40">
+            {groups.length === 0 ? (
               <div className="flex h-64 flex-col items-center justify-center rounded-xl border border-dashed">
                 <Inbox className="mb-2 h-8 w-8 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">还没有问答记录</p>
               </div>
+            ) : (
+              groups.map((g) => (
+                <ConvCard
+                  key={g.key}
+                  group={g}
+                  onDelete={
+                    g.convId !== null
+                      ? () =>
+                          deleteMut.mutate({ conversationId: g.convId!, courseId: g.courseId })
+                      : undefined
+                  }
+                  onSeek={(ts) => router.push(`/courses/${g.courseId}`)}
+                />
+              ))
             )}
           </div>
         </ScrollArea>
       )}
     </div>
   )
+}
+
+function ConvCard({
+  group,
+  onDelete,
+  onSeek,
+}: {
+  group: ConvGroup
+  onDelete?: () => void
+  onSeek?: (timestamp: number, courseId?: number) => void
+}) {
+  return (
+    <div className="rounded-xl border bg-card p-4 shadow-sm">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="h-4 w-4 text-primary" />
+          <span className="font-semibold">{group.title}</span>
+          <Badge variant="secondary">{SCOPE_LABEL[group.scope]}</Badge>
+          {group.courseTitle && (
+            <span className="text-xs text-muted-foreground">{group.courseTitle}</span>
+          )}
+          <span className="text-xs text-muted-foreground">
+            · {group.messages.length} 条消息
+          </span>
+        </div>
+        {onDelete && (
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={onDelete}>
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+
+      <div className="space-y-3">
+        {group.messages.map((m) => (
+          <MessageRow key={m.id} message={m} onSeek={onSeek} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function MessageRow({
+  message,
+  onSeek,
+}: {
+  message: HistoryItem
+  onSeek?: (timestamp: number, courseId?: number) => void
+}) {
+  const isUser = message.role === "user"
+  const groups = deduplicateSources(normalizeSources(message.sources))
+  return (
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+      <div
+        className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${
+          isUser
+            ? "rounded-tr-sm bg-secondary text-secondary-foreground"
+            : "rounded-tl-sm border bg-background"
+        }`}
+      >
+        <MarkdownRenderer>{message.content}</MarkdownRenderer>
+        {!isUser && groups.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {groups.map((g, i) => (
+              <button
+                key={i}
+                onClick={() => onSeek?.(g.timestamp)}
+                className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
+              >
+                {g.courseTitle ? `${g.courseTitle} · ` : ""}
+                {formatTimestamp(g.timestamp)}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function normalizeSources(sources: HistoryItem["sources"]): Source[] {
+  if (!sources) return []
+  if (Array.isArray(sources)) return sources
+  if (typeof sources === "string") {
+    try {
+      const parsed = JSON.parse(sources)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  return []
 }

@@ -77,11 +77,28 @@ class Summary(SQLModel, table=True):
     course: Course = Relationship(back_populates="summary")
 
 
+class Conversation(SQLModel, table=True):
+    """问答会话：一门课下的多轮对话分组（ChatGPT 式）。
+
+    绑定课程（course_id）；会话内消息通过 ChatMessage.conversation_id 关联。
+    scope/course_ids 记录该会话的检索范围（本期课程问答固定 scope=course）。
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    course_id: int = Field(foreign_key="course.id", index=True)
+    title: str = Field(default="新会话")
+    scope: str = Field(default="course")  # "course" | "all" | "set"
+    course_ids: Optional[str] = None  # JSON 数组：set/all 实际涉及的课程 id
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+
 class ChatMessage(SQLModel, table=True):
     """问答消息：用户提问和系统回答。"""
 
     id: Optional[int] = Field(default=None, primary_key=True)
     course_id: int = Field(foreign_key="course.id", index=True)  # 锚点课程（归档用）
+    conversation_id: Optional[int] = Field(default=None, foreign_key="conversation.id", index=True)  # 所属会话
     role: str  # "user" 或 "assistant"
     content: str
     scope: str = Field(default="course")  # "course" | "all" | "set"
@@ -187,3 +204,19 @@ class Note(SQLModel, table=True):
     timestamp: float = Field(default=0.0)  # 视频时间点（秒）
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+
+
+class Chapter(SQLModel, table=True):
+    """视频章节：按时间窗口自动划分，每章带 AI 生成的标题与速览。
+
+    首次请求时生成并缓存（按 course_id），后续直接读取。
+    """
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    course_id: int = Field(foreign_key="course.id", index=True)
+    index: int  # 第几章（从 1 开始）
+    title: str
+    summary: str
+    start_time: float
+    end_time: float
+    created_at: datetime = Field(default_factory=_utcnow)

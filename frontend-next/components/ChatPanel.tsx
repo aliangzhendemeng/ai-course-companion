@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useEffect, useState } from "react"
-import { Send, Loader2, BookOpen, Globe, Layers, Mic, MicOff } from "lucide-react"
+import { Send, Loader2, BookOpen, Globe, Layers, Mic, MicOff, ImagePlus, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -24,13 +24,15 @@ interface ChatPanelProps {
   courseId: number
   messages: ChatMessage[]
   isLoading?: boolean
-  onSend: (question: string, scope: ChatScope, courseIds?: number[]) => void
+  onSend: (question: string, scope: ChatScope, courseIds?: number[], image?: string) => void
   onSeek?: (timestamp: number, courseId?: number) => void
   defaultScope?: ChatScope
   lockScope?: boolean
   /** 隐藏"当前课程"选项（用于跨课程的全局搜索页） */
   hideCourseScope?: boolean
   title?: string
+  /** 会话模式：隐藏范围切换器（会话内 scope 固定为当前课程） */
+  sessionMode?: boolean
 }
 
 export function ChatPanel({
@@ -43,11 +45,15 @@ export function ChatPanel({
   lockScope = false,
   hideCourseScope = false,
   title = "知识问答",
+  sessionMode = false,
 }: ChatPanelProps) {
   const [input, setInput] = useState("")
   const [scope, setScope] = useState<ChatScope>(defaultScope)
   // 学习集模式：选中的课程 id 集合
   const [setCourseIds, setSetCourseIds] = useState<number[]>([])
+  // 上传图片（base64 data url）
+  const [image, setImage] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   // 语音输入：识别文本追加到输入框
@@ -69,9 +75,45 @@ export function ChatPanel({
 
   const handleSend = () => {
     const question = input.trim()
-    if (!question || isLoading) return
-    onSend(question, scope, scope === "set" ? setCourseIds : undefined)
+    if ((!question && !image) || isLoading) return
+    onSend(question || "请看看这张图片", scope, scope === "set" ? setCourseIds : undefined, image ?? undefined)
     setInput("")
+    setImage(null)
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  const handlePickImage = (file: File | undefined) => {
+    if (!file) return
+    if (!file.type.startsWith("image/")) return
+    const reader = new FileReader()
+    reader.onload = () => setImage(typeof reader.result === "string" ? reader.result : null)
+    reader.readAsDataURL(file)
+  }
+
+  // 粘贴图片：Ctrl/Cmd+V 直接贴截图
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile()
+        if (file) {
+          handlePickImage(file)
+          e.preventDefault()
+          return
+        }
+      }
+    }
+  }
+
+  // 拖拽图片：把图片文件拖到输入框
+  const handleDrop = (e: React.DragEvent) => {
+    const file = e.dataTransfer?.files?.[0]
+    if (file && file.type.startsWith("image/")) {
+      handlePickImage(file)
+      e.preventDefault()
+    }
   }
 
   const handleScopeChange = (v: string) => {
@@ -89,7 +131,7 @@ export function ChatPanel({
     <div className="flex h-full flex-col rounded-xl border bg-card shadow-sm">
       <div className="flex items-center justify-between gap-2 border-b p-4">
         <h3 className="font-semibold">{title}</h3>
-        {lockScope ? (
+        {sessionMode ? null : lockScope ? (
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Globe className="h-3.5 w-3.5" />
             全部课程
@@ -156,7 +198,37 @@ export function ChatPanel({
       </ScrollArea>
 
       <div className="border-t p-4">
+        {image && (
+          <div className="mb-2 inline-block relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={image} alt="待发送图片" className="h-16 w-16 rounded border object-cover" />
+            <button
+              onClick={() => setImage(null)}
+              className="absolute -right-1.5 -top-1.5 rounded-full bg-destructive p-0.5 text-destructive-foreground"
+              title="移除图片"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
         <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handlePickImage(e.target.files?.[0])}
+          />
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-auto shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            title="上传图片询问"
+            type="button"
+          >
+            <ImagePlus className="h-4 w-4" />
+          </Button>
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -166,10 +238,13 @@ export function ChatPanel({
                 handleSend()
               }
             }}
+            onPaste={handlePaste}
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
             placeholder={
               scope === "set" && setCourseIds.length === 0
                 ? "请先在上方选择要一起学习的课程..."
-                : "输入你的问题..."
+                : "输入你的问题，可直接粘贴/拖入图片..."
             }
             className="min-h-[60px] flex-1 resize-none"
           />
@@ -188,7 +263,7 @@ export function ChatPanel({
           <Button
             size="icon"
             className="h-auto shrink-0"
-            disabled={!input.trim() || isLoading || !canSend}
+            disabled={(!input.trim() && !image) || isLoading || !canSend}
             onClick={handleSend}
           >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}

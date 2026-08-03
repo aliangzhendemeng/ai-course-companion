@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { BookX, CheckCircle2, Loader2, PlayCircle, RefreshCw, Sparkles, Trash2, XCircle } from "lucide-react"
+import { BookX, CheckCircle2, Download, Loader2, PlayCircle, RefreshCw, Sparkles, Trash2, XCircle } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -18,6 +18,7 @@ import {
 import { formatTimestamp } from "@/lib/timestamp"
 import { useCompanion } from "@/components/companion/CompanionContext"
 import type { Question, QuizScope, WrongQuestion } from "@/lib/api"
+import { downloadExport } from "@/lib/api"
 
 interface QuizPanelProps {
   scope: QuizScope
@@ -130,16 +131,27 @@ export function QuizPanel({ scope, onSeek }: QuizPanelProps) {
                 历史答错记录，可重做；连续答对 {wrong[0]?.master_streak ?? 2} 次才标"已掌握"，记录保留。
               </p>
               {wrong.length > 0 && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => clearWrongMutation.mutate(scope)}
-                  disabled={clearWrongMutation.isPending}
-                  title="清空错题本历史（不影响题目）"
-                >
-                  {clearWrongMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1 h-4 w-4" />}
-                  清空错题本
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => downloadExport("wrong-questions", scope, "md", "wrong-questions.md")}
+                    title="导出错题本为 Markdown"
+                  >
+                    <Download className="mr-1 h-4 w-4" />
+                    导出
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => clearWrongMutation.mutate(scope)}
+                    disabled={clearWrongMutation.isPending}
+                    title="清空错题本历史（不影响题目）"
+                  >
+                    {clearWrongMutation.isPending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Trash2 className="mr-1 h-4 w-4" />}
+                    清空错题本
+                  </Button>
+                </div>
               )}
             </div>
             {wrong.length === 0 ? (

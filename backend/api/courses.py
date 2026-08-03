@@ -241,6 +241,28 @@ def get_course_subtitles(course_id: int):
     return Response(content=vtt, media_type="text/vtt; charset=utf-8")
 
 
+@router.get("/{course_id}/chapters")
+def list_chapters(course_id: int):
+    """返回课程章节速览（首次调用自动生成并缓存）。"""
+    from backend.services.chapter_service import ChapterService
+
+    try:
+        chapters = ChapterService().list_chapters(course_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return [
+        {
+            "id": c.id,
+            "index": c.index,
+            "title": c.title,
+            "summary": c.summary,
+            "start_time": c.start_time,
+            "end_time": c.end_time,
+        }
+        for c in chapters
+    ]
+
+
 @router.delete("/{course_id}")
 def delete_course(course_id: int):
     """删除课程。"""
