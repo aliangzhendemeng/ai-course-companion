@@ -14,7 +14,6 @@ import { QuizPanel } from "@/components/QuizPanel"
 import { FlashcardPanel } from "@/components/FlashcardPanel"
 import { NotesPanel } from "@/components/NotesPanel"
 import { SegmentSummary } from "@/components/SegmentSummary"
-import { ChaptersPanel } from "@/components/ChaptersPanel"
 import { ConversationSwitcher } from "@/components/ConversationSwitcher"
 import {
   useCourse,
@@ -122,11 +121,13 @@ export default function CourseDetailPage() {
                 <TabsTrigger value="flashcard">闪卡</TabsTrigger>
                 <TabsTrigger value="notes">笔记</TabsTrigger>
               </TabsList>
-              <TabsContent value="summary" className="mt-4 flex-1">
-                <div className="space-y-4">
-                  <SummaryTabs summary={summary} isLoading={summaryLoading} onSeek={handleSeek} />
-                  <ChaptersPanel courseId={courseId} onSeek={handleSeek} />
-                </div>
+              <TabsContent value="summary" className="mt-4 flex-1 min-h-0">
+                <SummaryTabs
+                  summary={summary}
+                  isLoading={summaryLoading}
+                  courseId={courseId}
+                  onSeek={handleSeek}
+                />
               </TabsContent>
               <TabsContent value="quiz" className="mt-4 flex-1">
                 <QuizPanel scope={{ courseId }} onSeek={handleSeek} />

@@ -263,6 +263,18 @@ def list_chapters(course_id: int):
     ]
 
 
+@router.get("/{course_id}/mindmap")
+def get_mindmap(course_id: int):
+    """返回课程思维导图树（首次调用自动生成并缓存）。"""
+    from backend.services.mindmap_service import MindMapService
+
+    try:
+        tree = MindMapService().get_or_generate(course_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return tree
+
+
 @router.delete("/{course_id}")
 def delete_course(course_id: int):
     """删除课程。"""

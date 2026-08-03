@@ -113,14 +113,6 @@ export function FlashcardPanel({ scope, onSeek }: FlashcardPanelProps) {
                 <Download className="mr-1 h-4 w-4" />
                 导出
               </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => downloadExport("flashcards", scope, "anki", "flashcards-anki.txt")}
-                title="导出为 Anki 可导入的 TSV"
-              >
-                Anki
-              </Button>
               <Button variant="ghost" size="sm" onClick={() => clearMutation.mutate(scope)} disabled={busy} title="清空当前闪卡">
                 <Trash2 className="mr-1 h-4 w-4" />
                 清空
@@ -179,7 +171,7 @@ export function FlashcardPanel({ scope, onSeek }: FlashcardPanelProps) {
               {/* 卡片 */}
               <button
                 onClick={() => setFlipped(!flipped)}
-                className="flex min-h-[220px] flex-1 flex-col items-center justify-center gap-3 rounded-xl border bg-card p-6 text-center shadow-sm transition-colors hover:bg-accent/50"
+                className="flex min-h-[120px] flex-col items-center justify-center gap-2 rounded-xl border bg-card p-4 text-center shadow-sm transition-colors hover:bg-accent/50"
               >
                 <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
                   {flipped ? "背面 · 点击翻回" : "正面 · 点击翻面"}

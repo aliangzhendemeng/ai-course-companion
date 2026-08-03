@@ -87,6 +87,19 @@
 
 ---
 
+## Phase 6: 会话制问答 + 学伴增强 + 思维导图/周报（005 收尾）
+
+**Purpose**: ChatGPT 式多轮会话 + 可拖动学伴 + 第三迭代（思维导图、学习周报）
+
+- [x] T029 会话制问答：`Conversation` 模型 + `ChatMessage.conversation_id`；`ask` 支持 conversation_id 续写、带最近 6 条历史；RAG `query*` 加 history 参数；旧消息自动迁移成历史会话（含 reload 自愈清理）；前端 ConversationSwitcher（切换/新建/改名/删除）+ 历史页按会话分组
+- [x] T030 图片询问增强：ChatPanel 支持粘贴/拖拽上传图片 → 视觉描述 + chat LLM 回答
+- [x] T031 可拖动学伴：形象作拖动手柄，位置 localStorage 记忆、边界限制；收起按钮
+- [x] T032 思维导图：`MindMap` 模型 + `MindMapService`（LLM 生成树状知识结构，限深限宽，缓存）；`/api/courses/{id}/mindmap`；前端 MindMapPanel 递归渲染树（课程页总结 Tab）
+- [x] T033 学习周报：`WeeklyReportService` 聚合最近 7 天（答题正确率/新增闪卡/笔记/提问/学习天数）；`/api/weekly-report`；前端 WeeklyReport（课程库页）
+- [x] T034 验证：后端 pytest 全过（127 项）、前端 tsc 通过
+
+---
+
 ## Dependencies & Execution Order
 
 ### Phase Dependencies

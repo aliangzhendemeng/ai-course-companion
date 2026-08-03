@@ -567,6 +567,21 @@ export async function getDashboard(): Promise<Dashboard> {
   return request<Dashboard>("/api/dashboard")
 }
 
+// ---- 学习周报（Weekly Report）----
+
+export interface WeeklyReport {
+  window_days: number
+  quiz: { attempts: number; correct: number; accuracy: number }
+  flashcards_generated: number
+  notes: number
+  questions: number
+  study_days: number
+}
+
+export async function getWeeklyReport(): Promise<WeeklyReport> {
+  return request<WeeklyReport>("/api/weekly-report")
+}
+
 // ---- 时间段总结（Segment Summary）----
 
 export interface SegmentSummary {
@@ -601,6 +616,17 @@ export interface Chapter {
 
 export async function getChapters(courseId: number): Promise<Chapter[]> {
   return request<Chapter[]>(`/api/courses/${courseId}/chapters`)
+}
+
+// ---- 思维导图（MindMap）----
+
+export interface MindMapNode {
+  title: string
+  children?: MindMapNode[]
+}
+
+export async function getMindMap(courseId: number): Promise<MindMapNode> {
+  return request<MindMapNode>(`/api/courses/${courseId}/mindmap`)
 }
 
 /** TTS：文本转语音，返回音频 Blob（MP3），音色随角色 */

@@ -42,8 +42,10 @@ import {
   listCharacters,
   getStudyStats,
   getDashboard,
+  getWeeklyReport,
   summarizeSegment,
   getChapters,
+  getMindMap,
   listConversations,
   getConversationMessages,
   renameConversation,
@@ -79,8 +81,10 @@ import {
   type NoteKind,
   type StudyStats,
   type Dashboard,
+  type WeeklyReport,
   type SegmentSummary,
   type Chapter,
+  type MindMapNode,
   type Conversation,
 } from "@/lib/api"
 
@@ -526,6 +530,16 @@ export function useDashboard() {
   })
 }
 
+// ---- 学习周报 ----
+
+export function useWeeklyReport() {
+  return useQuery<WeeklyReport, Error>({
+    queryKey: ["weekly-report"],
+    queryFn: () => getWeeklyReport(),
+    staleTime: 60 * 1000,
+  })
+}
+
 // ---- 时间段总结 ----
 
 export function useSummarizeSegment() {
@@ -540,6 +554,16 @@ export function useChapters(courseId: number) {
   return useQuery<Chapter[], Error>({
     queryKey: ["chapters", courseId],
     queryFn: () => getChapters(courseId),
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+// ---- 思维导图 ----
+
+export function useMindMap(courseId: number) {
+  return useQuery<MindMapNode, Error>({
+    queryKey: ["mindmap", courseId],
+    queryFn: () => getMindMap(courseId),
     staleTime: 5 * 60 * 1000,
   })
 }

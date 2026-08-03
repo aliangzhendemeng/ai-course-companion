@@ -112,6 +112,15 @@ frontend-next/
 - **章节速览(#4)**：`Chapter` 表 + `ChapterService` 按时间窗口分章（3-12 章）、LLM 批量生成标题/速览、首次生成缓存到库；容错 JSON 提取（括号平衡，处理转义/字符串内括号）
 - 验证：后端 pytest 109 项全过（新增 38）、前端 tsc 通过、运行中后端真实接口 curl 验证
 
+### Phase 6: 会话制问答 + 学伴增强 + 思维导图/周报（005 收尾）
+
+- **会话制(T029)**：`Conversation` 表 + `ChatMessage.conversation_id`；`ChatService.ask` 续写带最近 6 条历史，RAG `query*` 加 history 参数；旧消息自动迁移成历史会话（reload 自愈清理空会话）；前端会话切换/新建/改名/删除 + 历史页按会话分组
+- **图片询问增强(T030)**：ChatPanel 粘贴/拖拽上传 → 视觉描述 + chat LLM 回答
+- **可拖动学伴(T031)**：形象作拖动手柄，位置 localStorage 记忆 + 边界限制；收起按钮
+- **思维导图(T032)**：`MindMap` 表 + `MindMapService`（LLM 生成树，限深 3 层/宽 6，缓存）；容错 JSON 对象提取；前端 MindMapPanel 递归渲染（缩进 + 连线）
+- **学习周报(T033)**：`WeeklyReportService` 聚合最近 7 天（复用 study_dates）；前端 WeeklyReport 统计卡
+- 验证：后端 pytest 127 项全过、前端 tsc 通过
+
 ## 架构预留（后续迭代，本 plan 不实现）
 
 - Question/Flashcard 已含 `source_timestamp`、`source_course_id`，供学伴/错题本/掌握度复用

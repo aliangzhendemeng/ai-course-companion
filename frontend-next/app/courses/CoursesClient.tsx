@@ -11,6 +11,7 @@ import { UploadModal } from "@/components/UploadModal"
 import { StudySetStudyPanel } from "@/components/StudySetStudyPanel"
 import { StreakCard } from "@/components/StreakCard"
 import { DashboardPanel } from "@/components/DashboardPanel"
+import { WeeklyReport } from "@/components/WeeklyReport"
 import { useCourses, useUploadCourse, useDeleteCourse, useReprocessCourse } from "@/hooks/use-api"
 import type { Course } from "@/lib/api"
 
@@ -79,6 +80,10 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
 
       <div className="mb-6">
         <DashboardPanel />
+      </div>
+
+      <div className="mb-6">
+        <WeeklyReport />
       </div>
 
       <div className="mb-6 flex items-center gap-3">

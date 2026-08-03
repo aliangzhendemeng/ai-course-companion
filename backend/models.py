@@ -220,3 +220,12 @@ class Chapter(SQLModel, table=True):
     start_time: float
     end_time: float
     created_at: datetime = Field(default_factory=_utcnow)
+
+
+class MindMap(SQLModel, table=True):
+    """课程思维导图：LLM 从内容生成的树状知识结构（JSON），每课程一份，缓存。"""
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    course_id: int = Field(foreign_key="course.id", index=True)
+    tree: str  # JSON 字符串：{title, children: [{title, children: [...]}]}
+    created_at: datetime = Field(default_factory=_utcnow)
