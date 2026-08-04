@@ -5,7 +5,9 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
-data/
+# data/ 大目录（uploads/frames/chroma/bm25）不入库，但保留学习数据库 app.db
+data/*
+!data/app.db
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -19,13 +21,6 @@ data/
 dist/
 build/
 
-# 学伴角色形象素材（第三方 IP，不进仓库；仅保留 meta.json 配置）
-# 忽略各角色目录下的图片/动画素材，但保留 meta.json 与目录结构
-assets/characters/**/*.png
-assets/characters/**/*.jpg
-assets/characters/**/*.jpeg
-assets/characters/**/*.gif
-assets/characters/**/*.webp
-assets/characters/**/*.svg
+# 学伴角色：配置 + 形象素材都入库（换设备可直接用；仅忽略视频素材）
 assets/characters/**/*.mp4
 assets/characters/**/*.webm
