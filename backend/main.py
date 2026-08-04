@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.config import settings
 from backend.database import create_db_and_tables
 from backend.logger import setup_logging
-from backend.api import chat, courses, debug, history, progress, settings as settings_api, study_sets, summaries
+from backend.api import characters, chat, conversations, courses, dashboard, debug, export, flashcards, history, notes, progress, quiz, segment, settings as settings_api, study_sets, study_stats, summaries, weekly_report
 
 
 @asynccontextmanager
@@ -46,6 +46,16 @@ app.include_router(debug.router, prefix="/api/courses", tags=["debug"])
 app.include_router(debug.router, prefix="/api/chat", tags=["debug"])
 app.include_router(settings_api.router, prefix="/api/settings", tags=["settings"])
 app.include_router(study_sets.router, prefix="/api/study-sets", tags=["study-sets"])
+app.include_router(quiz.router, prefix="/api/quiz", tags=["quiz"])
+app.include_router(flashcards.router, prefix="/api/flashcards", tags=["flashcards"])
+app.include_router(characters.router, prefix="/api/characters", tags=["characters"])
+app.include_router(notes.router, prefix="/api/notes", tags=["notes"])
+app.include_router(export.router, prefix="/api/export", tags=["export"])
+app.include_router(study_stats.router, prefix="/api/study-stats", tags=["study-stats"])
+app.include_router(dashboard.router, prefix="/api/dashboard", tags=["dashboard"])
+app.include_router(weekly_report.router, prefix="/api/weekly-report", tags=["weekly-report"])
+app.include_router(segment.router, prefix="/api/segment", tags=["segment"])
+app.include_router(conversations.router, prefix="/api", tags=["conversations"])
 
 
 @app.get("/health")

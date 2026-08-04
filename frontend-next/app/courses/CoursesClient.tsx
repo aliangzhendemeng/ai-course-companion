@@ -2,12 +2,17 @@
 
 import { useState } from "react"
 import { Plus, Loader2, Search, Upload } from "lucide-react"
+import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { CourseCard } from "@/components/CourseCard"
 import { UploadModal } from "@/components/UploadModal"
-import { useCourses, useUploadCourse, useDeleteCourse, useReprocessCourse } from "@/hooks/use-api"
+import { StudySetStudyPanel } from "@/components/StudySetStudyPanel"
+import { StreakCard } from "@/components/StreakCard"
+import { DashboardPanel } from "@/components/DashboardPanel"
+import { WeeklyReport } from "@/components/WeeklyReport"
+import { useCourses, useUploadCourse, useImportCourse, useDeleteCourse, useReprocessCourse } from "@/hooks/use-api"
 import type { Course } from "@/lib/api"
 
 interface CoursesClientProps {
@@ -17,6 +22,7 @@ interface CoursesClientProps {
 export function CoursesClient({ initialCourses }: CoursesClientProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [search, setSearch] = useState("")
+  const router = useRouter()
 
   const hasProcessing = (courses?: Course[]) =>
     courses?.some((c) => c.status !== "completed" && c.status !== "failed") ?? false
@@ -30,6 +36,7 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
     },
   })
   const uploadMutation = useUploadCourse()
+  const importMutation = useImportCourse()
   const deleteMutation = useDeleteCourse()
   const reprocessMutation = useReprocessCourse()
 
@@ -47,8 +54,12 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
     }
   }
 
+  const handleImport = async (url: string, title?: string) => {
+    await importMutation.mutateAsync({ url, title })
+  }
+
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto p-6 pb-40">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">课程库</h1>
@@ -56,7 +67,12 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
             共 {courses?.length || 0} 门课程，{completedCount} 门已完成
           </p>
         </div>
-        <UploadModal onUpload={handleUpload} isLoading={isUploading}>
+        <UploadModal
+          onUpload={handleUpload}
+          onImport={handleImport}
+          isLoading={isUploading}
+          isImporting={importMutation.isPending}
+        >
           <Button disabled={isUploading} size="sm" className="gap-1.5">
             {isUploading ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -66,6 +82,18 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
             上传课程
           </Button>
         </UploadModal>
+      </div>
+
+      <div className="mb-6">
+        <StreakCard />
+      </div>
+
+      <div className="mb-6">
+        <DashboardPanel />
+      </div>
+
+      <div className="mb-6">
+        <WeeklyReport />
       </div>
 
       <div className="mb-6 flex items-center gap-3">
@@ -79,6 +107,18 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
           />
         </div>
       </div>
+
+      {completedCount > 0 && (
+        <div className="mb-6">
+          <StudySetStudyPanel
+            onSeek={(timestamp, targetCourseId) => {
+              if (targetCourseId) {
+                router.push(`/courses/${targetCourseId}?timestamp=${timestamp}`)
+              }
+            }}
+          />
+        </div>
+      )}
 
       {isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

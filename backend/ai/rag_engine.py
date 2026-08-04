@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from pathlib import Path
 
 import bm25s
@@ -402,22 +403,42 @@ class RAGEngine:
             return 0.0
         return len(set_a & set_b) / min(len(set_a), len(set_b))
 
-    def query(self, course_id: int, question: str) -> dict:
+    @staticmethod
+    def _format_history(history: list[tuple[str, str]] | None) -> str:
+        """把多轮对话历史格式化为 prompt 片段（最近 6 条）。"""
+        if not history:
+            return ""
+        lines = ["之前的对话（仅供理解上下文，回答仍以下方课程内容为准）："]
+        for role, content in history[-6:]:
+            who = "用户" if role == "user" else "助教"
+            lines.append(f"{who}：{(content or '')[:300]}")
+        return "\n".join(lines) + "\n\n"
+
+    def query(self, course_id: int, question: str, history: list[tuple[str, str]] | None = None) -> dict:
         """基于课程内容回答问题（单课程）。
 
         优先使用完整清洗文本；如果文本过长，则回退到 RAG 片段。
         """
         full_text = self._load_course_full_text(course_id)
         if full_text and len(full_text) <= self.FULL_TEXT_MAX_CHARS:
-            return self._query_with_full_text(question, full_text, course_id)
+            return self._query_with_full_text(question, full_text, course_id, history=history)
 
         # 回退：课程无内容或过长，使用 RAG 片段
         collection_name = self._get_collection_name(course_id)
         docs = self._retrieve(collection_name, collection_name, question)
-        return self._answer_with_docs(question, docs, multi_course=False)
+        return self._answer_with_docs(question, docs, multi_course=False, history=history)
 
     def _load_course_full_text(self, course_id: int) -> str:
-        """从数据库加载一门课的完整清洗文本（字幕 + OCR）。"""
+        """从数据库加载一门课的完整清洗文本（字幕 + OCR，按时间排序）。"""
+        segments = self._load_course_segments(course_id)
+        return "\n\n".join(text for _ts, _st, text in segments)
+
+    def _load_course_segments(self, course_id: int) -> list[tuple[float, str, str]]:
+        """加载一门课的内容段落（带时间戳），按时间排序。
+
+        返回 [(timestamp, source_type, text), ...]：source_type 为 transcript/vision_desc。
+        用于按时间引用：正文 [N] 与来源列表一一对应并锚定视频时间点。
+        """
         with Session(engine) as session:
             transcripts = session.exec(
                 select(Transcript).where(Transcript.course_id == course_id).order_by(Transcript.start_time)
@@ -426,65 +447,148 @@ class RAGEngine:
                 select(Frame).where(Frame.course_id == course_id).order_by(Frame.timestamp)
             ).all()
 
-        parts = []
+        segments: list[tuple[float, str, str]] = []
         for t in transcripts:
-            if t.text:
-                parts.append(f"[字幕 {format_timestamp(t.start_time)}] {t.text}")
+            if t.text and t.text.strip():
+                segments.append((float(t.start_time), "transcript", t.text.strip()))
         for f in frames:
             if f.ocr_text:
                 merged = self._merge_ocr_text(f.ocr_text)
                 if merged:
-                    parts.append(f"[课件 {format_timestamp(f.timestamp)}] {merged}")
+                    segments.append((float(f.timestamp), "vision_desc", merged))
+        segments.sort(key=lambda s: s[0])
+        return segments
 
-        return "\n\n".join(parts)
+    @staticmethod
+    def _cited_timestamps(text: str) -> list[int]:
+        """从回答中提取被引用的时间戳（秒，按首次出现顺序去重）。
 
-    def _query_with_full_text(self, question: str, full_text: str, course_id: int) -> dict:
-        """使用完整课程文本直接回答。"""
+        识别 [M:SS] 或 [H:MM:SS] 形式的引用，如 [1:23] -> 83。
+        """
+        seen: list[int] = []
+        for m in re.findall(r"\[(\d+):(\d{2})(?::(\d{2}))?\]", text):
+            if m[2]:  # H:MM:SS
+                sec = int(m[0]) * 3600 + int(m[1]) * 60 + int(m[2])
+            else:  # M:SS
+                sec = int(m[0]) * 60 + int(m[1])
+            if sec not in seen:
+                seen.append(sec)
+        return seen
+
+    @staticmethod
+    def _cap_consecutive_citations(text: str, max_per: int = 3) -> str:
+        """连续的 [N][N]... 每组最多保留 max_per 个角标（防止 LLM 在一处堆砌）。"""
+        return re.sub(
+            r"(?:\[\d+\])+",
+            lambda m: "".join(re.findall(r"\[\d+\]", m.group(0))[:max_per]),
+            text,
+        )
+
+    def _query_with_full_text(self, question: str, full_text: str, course_id: int, history: list[tuple[str, str]] | None = None) -> dict:
+        """使用完整课程文本回答，正文论点标注 [N]，编号与来源严格对应。
+
+        关键：给每段标注时间 [MM:SS] 并要求 LLM 在论点后引用该时间；再把每个被引用的
+        时间映射为稳定编号 [N]（按出现顺序），来源列表第 N 条即正文 [N]，且锚定到
+        最接近的内容段落的视频时间点。这样无论引用哪些段落，编号与来源永远一一对应。
+        """
+        segments = self._load_course_segments(course_id)
+        course_titles = self._get_course_titles([course_id])
+        title = course_titles.get(course_id)
+
+        if not segments:
+            return {
+                "answer": "根据现有课程内容，无法找到答案。",
+                "debug": {"model": getattr(self.llm, "model_identifier", "unknown"), "prompt": "", "context": "", "raw_answer": ""},
+                "sources": [],
+            }
+
+        # 每段标注起始时间 [MM:SS]，截断到全文上限
+        numbered_parts: list[str] = []
+        kept: list[tuple[float, str, str]] = []
+        total = 0
+        for ts, st, text in segments:
+            entry = f"[{format_timestamp(ts)}] {text}"
+            if total + len(entry) > self.FULL_TEXT_MAX_CHARS and kept:
+                break
+            numbered_parts.append(entry)
+            kept.append((ts, st, text))
+            total += len(entry)
+        context = "\n\n".join(numbered_parts)
+
         system_prompt = (
-            "你是一位严谨的课程助教。请严格根据下面提供的完整课程内容回答用户问题。"
+            "你是一位严谨的课程助教。请严格根据下面提供的课程内容回答用户问题。"
+            "每段开头有方括号标注的时间（该段在视频中的起始时间）。"
+            "**凡是陈述课程中的概念、结论、要点、步骤，必须在其后用方括号标注对应时间**（如 [10:39]），"
+            "这是硬性要求——没有时间标注的陈述视为不合格。"
             "如果内容中没有包含问题的答案，请明确告诉用户'根据现有课程内容，无法找到答案'，不要编造。"
         )
         user_prompt = f"""
-        以下是完整课程内容：
+        {self._format_history(history)}以下是课程内容，每段开头标注了它在视频中的时间：
 
-        {full_text}
+        {context}
 
         用户问题：{question}
 
         要求：
-        1. 仅基于以上课程内容回答。
-        2. 如果内容中没有答案，明确说明无法找到。
-        3. 回答尽量准确、完整。
+        1. 仅基于以上内容回答。
+        2. **每个论点、结论或要点之后，必须紧跟支撑它的内容所对应的时间标注**，格式与上文一致，例如：……是基本概念[10:39]。即使是概述/总结，每个要点也要标注时间。
+        3. 每个论点后只标 1~2 个最相关的时间，不要堆砌 3 个以上；全文引用的不同时间点总数尽量控制在 20 个以内，只保留最关键的。
+        4. 只引用上文真实出现过的时间，不要编造或修改时间。
+        5. 如果内容中没有答案，明确说明无法找到。
         """
 
         raw_answer = self.llm.chat(system_prompt, user_prompt, max_tokens=1500)
 
-        # 用检索片段生成带真实时间戳和课程名的来源，而不是 0:00 占位
-        collection_name = self._get_collection_name(course_id)
-        try:
-            source_docs = self._retrieve(collection_name, collection_name, question)
-        except Exception as e:
-            logger.warning("全文问答来源检索失败 course=%s: %s", course_id, e)
-            source_docs = []
-        course_titles = self._get_course_titles([course_id])
+        # 按"回答中引用的时间出现顺序"建立来源列表，并给每个引用分配稳定编号 [1][2]…
+        # 这样正文 [N] 永远对应来源列表第 N 条，且每个来源都锚定到视频时间点。
+        # 上限：来源最多 MAX_SOURCES 条，避免 LLM 宽泛连引导致来源爆炸。
+        MAX_SOURCES = 20
+        cited_ts = self._cited_timestamps(raw_answer)[:MAX_SOURCES]
+        ts_to_idx = {ts: i + 1 for i, ts in enumerate(cited_ts)}
+
+        def _repl(m: re.Match) -> str:
+            if m.group(3):
+                sec = int(m.group(1)) * 3600 + int(m.group(2)) * 60 + int(m.group(3))
+            else:
+                sec = int(m.group(1)) * 60 + int(m.group(2))
+            idx = ts_to_idx.get(sec)
+            return f"[{idx}]" if idx is not None else ""
+
+        answer = self._cap_consecutive_citations(re.sub(r"\[(\d+):(\d{2})(?::(\d{2}))?\]", _repl, raw_answer))
+
+        # 来源：只含被引用的，按编号顺序，时间锚定到最接近的段落起始时间
+        # 仅保留 answer 中实际出现的编号，避免角标被截断后来源多余
+        shown_nums = sorted({int(m) for m in re.findall(r"\[(\d+)\]", answer)})
+        kept_ts = [ts for ts, _st, _t in kept]
+        seg_by_ts = {ts: (st, text) for ts, st, text in kept}
+        sources = []
+        for n in shown_nums:
+            if 1 <= n <= len(cited_ts):
+                ts = cited_ts[n - 1]
+                nearest = min(kept_ts, key=lambda k: abs(k - ts))
+                st, text = seg_by_ts[nearest]
+                sources.append({
+                    "type": st,
+                    "timestamp": nearest,
+                    "text": text[:200],
+                    "course_id": course_id,
+                    "course_title": title,
+                })
 
         return {
-            "answer": raw_answer,
+            "answer": answer,
             "debug": {
                 "model": getattr(self.llm, "model_identifier", "unknown"),
                 "prompt": f"system:\n{system_prompt}\n\nuser:\n{user_prompt}",
-                "context": full_text,
+                "context": context,
                 "raw_answer": raw_answer,
             },
-            "sources": self._format_sources(
-                source_docs,
-                course_titles=course_titles,
-                fallback_title=course_titles.get(course_id),
-            ),
+            "sources": sources,
         }
 
-    def _answer_with_docs(self, question: str, docs: list[Document], multi_course: bool) -> dict:
+    def _answer_with_docs(self, question: str, docs: list[Document], multi_course: bool, history: list[tuple[str, str]] | None = None) -> dict:
         """使用 RAG 检索到的片段回答。"""
+        hist = self._format_history(history)
         context_parts = []
         for i, doc in enumerate(docs, 1):
             context_parts.append(f"[{i}] {doc.page_content}")
@@ -497,7 +601,7 @@ class RAGEngine:
                 "回答时尽量引用相关片段的编号，并说明来自哪门课程。"
             )
             user_prompt = f"""
-            以下是多门课程的内容片段，按相关性排序：
+            {hist}以下是多门课程的内容片段，按相关性排序：
 
             {context}
 
@@ -515,7 +619,7 @@ class RAGEngine:
                 "回答时尽量引用相关片段的编号。"
             )
             user_prompt = f"""
-            以下是课程内容片段，按相关性排序：
+            {hist}以下是课程内容片段，按相关性排序：
 
             {context}
 
@@ -543,11 +647,11 @@ class RAGEngine:
             "sources": self._format_sources(docs, course_titles=course_titles),
         }
 
-    def query_all(self, question: str) -> dict:
+    def query_all(self, question: str, history: list[tuple[str, str]] | None = None) -> dict:
         """基于所有课程内容回答问题（全局搜索）。"""
-        return self._query_across_courses(question, course_filter=None)
+        return self._query_across_courses(question, course_filter=None, history=history)
 
-    def query_multiple(self, course_ids: list[int], question: str) -> dict:
+    def query_multiple(self, course_ids: list[int], question: str, history: list[tuple[str, str]] | None = None) -> dict:
         """基于指定的若干门课程回答问题（学习集/多课程范围）。
 
         与 query_all 的区别：检索与全文拼接都限制在 course_ids 范围内，
@@ -559,9 +663,9 @@ class RAGEngine:
                 "debug": {"model": getattr(self.llm, "model_identifier", "unknown"), "prompt": "", "context": "", "raw_answer": ""},
                 "sources": [],
             }
-        return self._query_across_courses(question, course_filter=course_ids)
+        return self._query_across_courses(question, course_filter=course_ids, history=history)
 
-    def _query_across_courses(self, question: str, course_filter: list[int] | None) -> dict:
+    def _query_across_courses(self, question: str, course_filter: list[int] | None, history: list[tuple[str, str]] | None = None) -> dict:
         """跨课程回答核心：先全局检索定位相关课程，再拼接这些课的完整文本回答。
 
         course_filter 为 None 表示全部课程；否则限定在指定课程集合内。
@@ -578,7 +682,7 @@ class RAGEngine:
                 seen.add(cid)
 
         if not course_ids:
-            return self._answer_with_docs(question, docs, multi_course=True)
+            return self._answer_with_docs(question, docs, multi_course=True, history=history)
 
         # 取前 N 门相关课程，避免上下文爆炸
         course_ids = course_ids[:3]
@@ -592,7 +696,7 @@ class RAGEngine:
             context_parts.append(f"===== {title} =====\n{full_text}")
 
         if not context_parts:
-            return self._answer_with_docs(question, docs, multi_course=True)
+            return self._answer_with_docs(question, docs, multi_course=True, history=history)
 
         context = "\n\n".join(context_parts)
         system_prompt = (
@@ -600,7 +704,7 @@ class RAGEngine:
             "如果内容中没有包含问题的答案，请明确告诉用户'根据现有课程内容，无法找到答案'，不要编造。"
         )
         user_prompt = f"""
-        以下是多门课程的完整内容：
+        {self._format_history(history)}以下是多门课程的完整内容：
 
         {context}
 

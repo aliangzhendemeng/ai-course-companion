@@ -1,7 +1,7 @@
 "use client"
 
 import { useRef, useEffect, useState } from "react"
-import { Send, Loader2, BookOpen, Globe, Layers } from "lucide-react"
+import { Send, Loader2, BookOpen, Globe, Layers, Mic, MicOff, ImagePlus, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
@@ -15,20 +15,24 @@ import {
 } from "@/components/ui/select"
 import { MarkdownRenderer } from "@/components/MarkdownRenderer"
 import { StudySetPicker } from "@/components/StudySetPicker"
+import { useSpeechInput } from "@/hooks/use-speech-input"
+import { useCompanion } from "@/components/companion/CompanionContext"
 import { deduplicateSources, formatTimestamp } from "@/lib/timestamp"
-import type { Source, ChatMessage, ChatScope } from "@/lib/api"
+import type { Source, ChatMessage, ChatScope, WebResult } from "@/lib/api"
 
 interface ChatPanelProps {
   courseId: number
   messages: ChatMessage[]
   isLoading?: boolean
-  onSend: (question: string, scope: ChatScope, courseIds?: number[]) => void
+  onSend: (question: string, scope: ChatScope, courseIds?: number[], image?: string, webSearch?: boolean) => void
   onSeek?: (timestamp: number, courseId?: number) => void
   defaultScope?: ChatScope
   lockScope?: boolean
   /** 隐藏"当前课程"选项（用于跨课程的全局搜索页） */
   hideCourseScope?: boolean
   title?: string
+  /** 会话模式：隐藏范围切换器（会话内 scope 固定为当前课程） */
+  sessionMode?: boolean
 }
 
 export function ChatPanel({
@@ -41,12 +45,29 @@ export function ChatPanel({
   lockScope = false,
   hideCourseScope = false,
   title = "知识问答",
+  sessionMode = false,
 }: ChatPanelProps) {
   const [input, setInput] = useState("")
   const [scope, setScope] = useState<ChatScope>(defaultScope)
   // 学习集模式：选中的课程 id 集合
   const [setCourseIds, setSetCourseIds] = useState<number[]>([])
+  // 上传图片（base64 data url）
+  const [image, setImage] = useState<string | null>(null)
+  // 联网搜索开关
+  const [webSearch, setWebSearch] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
+
+  // 语音输入：识别文本追加到输入框
+  const speech = useSpeechInput({
+    onResult: (text) => setInput((prev) => (prev ? prev + " " + text : text)),
+  })
+  const { react } = useCompanion()
+
+  // 语音输入 / 等待回答时，学伴显示 loading 状态
+  useEffect(() => {
+    if (speech.listening || isLoading) react("loading")
+  }, [speech.listening, isLoading, react])
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -56,9 +77,45 @@ export function ChatPanel({
 
   const handleSend = () => {
     const question = input.trim()
-    if (!question || isLoading) return
-    onSend(question, scope, scope === "set" ? setCourseIds : undefined)
+    if ((!question && !image) || isLoading) return
+    onSend(question || "请看看这张图片", scope, scope === "set" ? setCourseIds : undefined, image ?? undefined, webSearch || undefined)
     setInput("")
+    setImage(null)
+    if (fileInputRef.current) fileInputRef.current.value = ""
+  }
+
+  const handlePickImage = (file: File | undefined) => {
+    if (!file) return
+    if (!file.type.startsWith("image/")) return
+    const reader = new FileReader()
+    reader.onload = () => setImage(typeof reader.result === "string" ? reader.result : null)
+    reader.readAsDataURL(file)
+  }
+
+  // 粘贴图片：Ctrl/Cmd+V 直接贴截图
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const items = e.clipboardData?.items
+    if (!items) return
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile()
+        if (file) {
+          handlePickImage(file)
+          e.preventDefault()
+          return
+        }
+      }
+    }
+  }
+
+  // 拖拽图片：把图片文件拖到输入框
+  const handleDrop = (e: React.DragEvent) => {
+    const file = e.dataTransfer?.files?.[0]
+    if (file && file.type.startsWith("image/")) {
+      handlePickImage(file)
+      e.preventDefault()
+    }
   }
 
   const handleScopeChange = (v: string) => {
@@ -76,7 +133,7 @@ export function ChatPanel({
     <div className="flex h-full flex-col rounded-xl border bg-card shadow-sm">
       <div className="flex items-center justify-between gap-2 border-b p-4">
         <h3 className="font-semibold">{title}</h3>
-        {lockScope ? (
+        {sessionMode ? null : lockScope ? (
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Globe className="h-3.5 w-3.5" />
             全部课程
@@ -143,7 +200,47 @@ export function ChatPanel({
       </ScrollArea>
 
       <div className="border-t p-4">
+        {image && (
+          <div className="mb-2 inline-block relative">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={image} alt="待发送图片" className="h-16 w-16 rounded border object-cover" />
+            <button
+              onClick={() => setImage(null)}
+              className="absolute -right-1.5 -top-1.5 rounded-full bg-destructive p-0.5 text-destructive-foreground"
+              title="移除图片"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+        )}
         <div className="flex gap-2">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => handlePickImage(e.target.files?.[0])}
+          />
+          <Button
+            size="icon"
+            variant={webSearch ? "default" : "outline"}
+            className="h-auto shrink-0"
+            onClick={() => setWebSearch((v) => !v)}
+            title="联网搜索（回答时额外查网络）"
+            type="button"
+          >
+            <Globe className="h-4 w-4" />
+          </Button>
+          <Button
+            size="icon"
+            variant="outline"
+            className="h-auto shrink-0"
+            onClick={() => fileInputRef.current?.click()}
+            title="上传图片询问"
+            type="button"
+          >
+            <ImagePlus className="h-4 w-4" />
+          </Button>
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -153,17 +250,32 @@ export function ChatPanel({
                 handleSend()
               }
             }}
+            onPaste={handlePaste}
+            onDrop={handleDrop}
+            onDragOver={(e) => e.preventDefault()}
             placeholder={
               scope === "set" && setCourseIds.length === 0
                 ? "请先在上方选择要一起学习的课程..."
-                : "输入你的问题..."
+                : "输入你的问题，可直接粘贴/拖入图片..."
             }
             className="min-h-[60px] flex-1 resize-none"
           />
+          {speech.supported && (
+            <Button
+              size="icon"
+              variant={speech.listening ? "destructive" : "outline"}
+              className="h-auto shrink-0"
+              onClick={speech.toggle}
+              title={speech.listening ? "停止语音输入" : "语音输入"}
+              type="button"
+            >
+              {speech.listening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+            </Button>
+          )}
           <Button
             size="icon"
             className="h-auto shrink-0"
-            disabled={!input.trim() || isLoading || !canSend}
+            disabled={(!input.trim() && !image) || isLoading || !canSend}
             onClick={handleSend}
           >
             {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -182,7 +294,33 @@ function MessageBubble({
   onSeek?: (timestamp: number, courseId?: number) => void
 }) {
   const isUser = message.role === "user"
-  const groups = deduplicateSources(normalizeSources(message.sources))
+  const sources = normalizeSources(message.sources)
+  const groups = deduplicateSources(sources)
+  const webResults = normalizeWebResults(message.web_results)
+  // 正文 [N] 引用角标 ↔ 来源列表：sources 已按编号顺序（sources[N-1] 即 [N]）
+  const [activeSource, setActiveSource] = useState<number | null>(null)
+  const sourceRefs = useRef<(HTMLLIElement | null)[]>([])
+
+  const jumpToSource = (num: number) => {
+    const idx = num - 1
+    if (idx < 0 || idx >= groups.length) return
+    setActiveSource(idx)
+    sourceRefs.current[idx]?.scrollIntoView({ behavior: "smooth", block: "nearest" })
+    const first = groups[idx].sources[0]
+    onSeek?.(groups[idx].timestamp, first.course_id || undefined)
+  }
+
+  const renderCitation = (num: number, key: string) => (
+    <button
+      key={key}
+      onClick={() => jumpToSource(num)}
+      className="mx-0.5 inline-flex h-4 min-w-4 items-center justify-center rounded-sm bg-primary/15 px-0.5 align-super text-[10px] font-semibold text-primary hover:bg-primary/30"
+      title={`跳转到来源 [${num}]`}
+    >
+      {num}
+    </button>
+  )
+
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
       <div
@@ -192,15 +330,54 @@ function MessageBubble({
             : "rounded-tl-sm border bg-background"
         }`}
       >
-        <MarkdownRenderer>{message.content}</MarkdownRenderer>
+        <MarkdownRenderer renderCitation={isUser ? undefined : renderCitation}>
+          {message.content}
+        </MarkdownRenderer>
         {!isUser && groups.length > 0 ? (
           <div className="mt-3 space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">参考来源</p>
-            <div className="flex flex-wrap gap-2">
+            <p className="text-xs font-medium text-muted-foreground">参考来源（点击跳转到视频对应位置）</p>
+            <ol className="flex flex-col gap-1.5">
               {groups.map((group, idx) => (
-                <SourceChip key={idx} group={group} onSeek={onSeek} />
+                <li
+                  key={idx}
+                  ref={(el) => {
+                    sourceRefs.current[idx] = el
+                  }}
+                >
+                  <SourceChip
+                    index={idx + 1}
+                    group={group}
+                    active={activeSource === idx}
+                    onSeek={(ts, cid) => {
+                      setActiveSource(idx)
+                      onSeek?.(ts, cid)
+                    }}
+                  />
+                </li>
               ))}
-            </div>
+            </ol>
+          </div>
+        ) : null}
+        {!isUser && webResults.length > 0 ? (
+          <div className="mt-3 space-y-1.5">
+            <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <Globe className="h-3 w-3" /> 网络参考
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {webResults.map((w, idx) => (
+                <li key={idx} className="rounded-lg border bg-muted/40 p-2 text-xs">
+                  <a
+                    href={w.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {w.title}
+                  </a>
+                  {w.snippet && <p className="mt-0.5 line-clamp-2 text-muted-foreground">{w.snippet}</p>}
+                </li>
+              ))}
+            </ul>
           </div>
         ) : null}
       </div>
@@ -222,25 +399,43 @@ function normalizeSources(sources: ChatMessage["sources"]): Source[] {
   return []
 }
 
+function normalizeWebResults(raw: ChatMessage["web_results"]): WebResult[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 function SourceChip({
+  index,
   group,
+  active,
   onSeek,
 }: {
+  index: number
   group: import("@/lib/timestamp").DeduplicatedSource
+  active?: boolean
   onSeek?: (timestamp: number, courseId?: number) => void
 }) {
   const first = group.sources[0]
   const label = group.courseTitle ? `${group.courseTitle} · ` : ""
-  const count = group.sources.length
   const time = formatTimestamp(group.timestamp)
   return (
     <button
       onClick={() => onSeek?.(group.timestamp, first.course_id || undefined)}
-      className="max-w-[220px] truncate rounded-full bg-muted px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-      title={`${first.type} · ${time} · ${first.text}`}
+      className={`flex max-w-full items-center gap-1.5 rounded-lg border px-2 py-1 text-left text-xs transition-colors ${
+        active
+          ? "border-primary bg-primary/10 text-primary"
+          : "border-transparent bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+      }`}
+      title={`跳转到 ${time}`}
     >
-      {label}{time}
-      {count > 1 && <span className="ml-1 text-[10px] opacity-80">({count} 个来源)</span>}
+      <span className="shrink-0 font-semibold text-primary">[{index}]</span>
+      <span className="shrink-0 font-medium">{label}{time}</span>
     </button>
   )
 }

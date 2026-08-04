@@ -57,6 +57,15 @@ class ChatRequest(BaseModel):
     question: str
     scope: str = "course"  # "course" | "all" | "set"
     course_ids: list[int] | None = None  # scope="set" 时指定的课程集合
+    image: str | None = None  # 上传图片（base64 data url），有图走视觉问答
+    conversation_id: int | None = None  # 续写某会话；不传则新建
+    web_search: bool = False  # 是否联网搜索补充
+
+
+class WebResult(BaseModel):
+    title: str
+    url: str
+    snippet: str = ""
 
 
 class ChatResponse(BaseModel):
@@ -64,6 +73,22 @@ class ChatResponse(BaseModel):
     answer: str
     sources: list[Source] | None
     answer_message_id: int | None = None
+    conversation_id: int | None = None  # 本次问答所属会话（新建或续写）
+    web_results: list[WebResult] | None = None  # 联网搜索结果
+
+
+class ConversationItem(BaseModel):
+    id: int
+    course_id: int
+    title: str
+    scope: str
+    course_ids: list[int] = []
+    created_at: datetime
+    updated_at: datetime
+
+
+class ConversationRenameRequest(BaseModel):
+    title: str
 
 
 class StudySetCreate(BaseModel):
@@ -82,3 +107,123 @@ class StudySetItem(BaseModel):
     course_ids: list[int]
     course_titles: list[str]
     created_at: datetime
+
+
+# ===== 测验（Question）=====
+
+class QuestionItem(BaseModel):
+    """单道题（不含答案，作答前展示用）。"""
+
+    id: int
+    type: str  # "choice" | "judge"
+    question: str
+    options: list[str] | None = None
+    source_course_id: int | None = None
+    source_timestamp: float | None = None
+
+
+class QuestionDetail(QuestionItem):
+    """含答案与解析（判分后 / 列表展示用），并附带最近一次作答进度。"""
+
+    answer: str
+    explanation: str | None = None
+    last_answer: str | None = None  # 最近一次作答（未作答为 None），供断点续答
+    last_correct: bool | None = None  # 最近一次作答是否正确
+
+
+class QuizGenerateRequest(BaseModel):
+    course_id: int | None = None
+    study_set_id: int | None = None
+    count: int = 12
+
+
+class QuizGenerateResponse(BaseModel):
+    generated: int  # 本次新生成题数
+    total: int  # 该范围当前总题数
+
+
+class QuizAnswerRequest(BaseModel):
+    answer: str  # 选择题 "A"/"B"...；判断题 "正确"/"错误"
+
+
+class QuizAnswerResponse(BaseModel):
+    question_id: int
+    correct: bool
+    answer: str  # 正确答案
+    explanation: str | None = None
+
+
+class WrongQuestionItem(QuestionDetail):
+    """错题本条目：历史答错记录，连续答对 N 次才标"已掌握"，记录保留。"""
+
+    mastered: bool  # 是否已掌握（自最近答错起连续答对 master_streak 次）
+    wrong_count: int  # 历史答错次数
+    streak: int  # 自最近一次答错起的连续答对数（掌握进度）
+    master_streak: int  # 达到多少连续答对算掌握
+
+
+# ===== 闪卡（Flashcard）=====
+
+class FlashcardItem(BaseModel):
+    id: int
+    front: str
+    back: str
+    familiarity: str  # known | fuzzy | unknown
+    source_course_id: int | None = None
+    source_timestamp: float | None = None
+    # SM-2 调度
+    ease: float = 2.5
+    interval_days: int = 0
+    repetitions: int = 0
+    due_date: datetime
+    last_reviewed_at: datetime | None = None
+
+
+class FlashcardGenerateRequest(BaseModel):
+    course_id: int | None = None
+    study_set_id: int | None = None
+    count: int = 15
+
+
+class FlashcardGenerateResponse(BaseModel):
+    generated: int
+    total: int
+
+
+class FlashcardFamiliarityRequest(BaseModel):
+    familiarity: str  # known | fuzzy | unknown
+
+
+class FlashcardReviewRequest(BaseModel):
+    quality: int  # 0-5，回忆质量（<3 答错重置）
+
+
+class FlashcardStats(BaseModel):
+    total: int
+    known: int
+    fuzzy: int
+    unknown: int
+    due: int = 0  # 待复习数
+
+
+# ===== 笔记/书签（Note）=====
+
+class NoteItem(BaseModel):
+    id: int
+    course_id: int
+    kind: str  # note | bookmark
+    content: str
+    timestamp: float  # 视频时间点（秒）
+    created_at: datetime
+    updated_at: datetime
+
+
+class NoteCreateRequest(BaseModel):
+    course_id: int
+    kind: str = "note"  # note | bookmark
+    content: str = ""
+    timestamp: float = 0.0
+
+
+class NoteUpdateRequest(BaseModel):
+    content: str

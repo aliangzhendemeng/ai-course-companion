@@ -127,33 +127,41 @@ class VideoProcessor:
         video_path = Path(course.video_path)
         audio_path = upload_dir / "audio.wav"
 
+        low_audio = False
         try:
-            # 1. 提取音频
-            self._update_status(course, "extracting_audio")
-            duration = self.audio_extractor.get_duration(video_path)
-            course.status_message = f"视频时长: {duration:.1f}s"
-            course.duration = duration
-            _save_course_duration(course_id, duration)
-            self.audio_extractor.extract(video_path, audio_path)
+            # 1+2. 音频提取 + ASR：若已有字幕则复用，跳过最耗时的转写（断点续传）
+            existing_transcripts = self._load_transcripts(course_id)
+            if existing_transcripts:
+                transcripts = existing_transcripts
+                duration = course.duration or 0.0
+                logger.info("课程 %s 复用已有 %d 条字幕，跳过音频提取与 ASR", course_id, len(transcripts))
+            else:
+                # 1. 提取音频
+                self._update_status(course, "extracting_audio")
+                duration = self.audio_extractor.get_duration(video_path)
+                course.status_message = f"视频时长: {duration:.1f}s"
+                course.duration = duration
+                _save_course_duration(course_id, duration)
+                self.audio_extractor.extract(video_path, audio_path)
 
-            # 检测音频是否近乎静音（无可用语音）
-            mean_volume = self.audio_extractor.get_mean_volume(audio_path)
-            low_audio = mean_volume < -40.0
-            if low_audio:
-                logger.warning("课程 %s 音频近乎静音（平均 %.1f dB），转写可能无有效内容", course_id, mean_volume)
+                # 检测音频是否近乎静音（无可用语音）
+                mean_volume = self.audio_extractor.get_mean_volume(audio_path)
+                low_audio = mean_volume < -40.0
+                if low_audio:
+                    logger.warning("课程 %s 音频近乎静音（平均 %.1f dB），转写可能无有效内容", course_id, mean_volume)
 
-            # 2. 语音识别
-            self._update_status(
-                course,
-                "transcribing",
-                f"音频平均音量 {mean_volume:.1f} dB" + ("（近乎静音，可能无法转写）" if low_audio else ""),
-            )
-            transcripts = self.asr_engine.transcribe(audio_path)
-            # 静音音频下 Whisper 会产生幻觉乱码，丢弃以免污染搜索与总结
-            if low_audio:
-                logger.warning("课程 %s 音频静音，丢弃 %d 条（疑似幻觉）字幕", course_id, len(transcripts))
-                transcripts = []
-            self._save_transcripts(course_id, transcripts)
+                # 2. 语音识别
+                self._update_status(
+                    course,
+                    "transcribing",
+                    f"音频平均音量 {mean_volume:.1f} dB" + ("（近乎静音，可能无法转写）" if low_audio else ""),
+                )
+                transcripts = self.asr_engine.transcribe(audio_path)
+                # 静音音频下 Whisper 会产生幻觉乱码，丢弃以免污染搜索与总结
+                if low_audio:
+                    logger.warning("课程 %s 音频静音，丢弃 %d 条（疑似幻觉）字幕", course_id, len(transcripts))
+                    transcripts = []
+                self._save_transcripts(course_id, transcripts)
 
             # 3. 抽取关键帧
             self._update_status(course, "extracting_frames")
@@ -209,7 +217,7 @@ class VideoProcessor:
         from sqlmodel import Session, delete
 
         with Session(engine) as session:
-            session.exec(delete(Transcript).where(Transcript.course_id == course_id))
+            # 保留 Transcript（ASR 最耗时），重新处理时跳过转写；只清帧/总结/索引
             session.exec(delete(Frame).where(Frame.course_id == course_id))
             session.exec(delete(Summary).where(Summary.course_id == course_id))
             session.commit()
@@ -244,6 +252,20 @@ class VideoProcessor:
             "failed": 100,
         }
         return mapping.get(status, 0)
+
+    def _load_transcripts(self, course_id: int) -> list[dict] | None:
+        """加载已存的字幕（断点续传用）；无则返回 None。"""
+        from backend.database import engine
+        from backend.models import Transcript
+        from sqlmodel import Session, select
+
+        with Session(engine) as session:
+            rows = session.exec(
+                select(Transcript).where(Transcript.course_id == course_id).order_by(Transcript.start_time)
+            ).all()
+            if not rows:
+                return None
+            return [{"text": r.text, "start_time": r.start_time, "end_time": r.end_time} for r in rows]
 
     def _save_transcripts(self, course_id: int, transcripts: list[dict]) -> None:
         from backend.database import engine

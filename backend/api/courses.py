@@ -6,7 +6,8 @@ import shutil
 from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
+from pydantic import BaseModel
 
 from backend.ai.processor import VideoProcessor
 from backend.config import settings
@@ -14,6 +15,11 @@ from backend.schemas import CourseCreateResponse, CourseDetail, CourseListItem
 from backend.services.course_service import CourseService
 
 router = APIRouter()
+
+
+class ImportRequest(BaseModel):
+    url: str
+    title: str | None = None
 
 
 def _process_course(course_id: int) -> None:
@@ -95,6 +101,42 @@ def upload_course(
     # 后台处理：延迟初始化 VideoProcessor，避免阻塞上传响应
     background_tasks.add_task(_process_course, course.id)
 
+    return CourseCreateResponse(
+        id=course.id,
+        title=course.title,
+        status=course.status,
+        created_at=course.created_at,
+    )
+
+
+def _import_course(course_id: int, url: str) -> None:
+    """后台：从 URL 下载视频 → 回填路径/标题 → 复用现有处理流程。"""
+    from backend.services.video_import_service import VideoImportService
+
+    service = CourseService()
+    try:
+        service.update_status(course_id, "downloading", "正在下载视频…")
+        title, video_path = VideoImportService().download(url, course_id)
+        course = service.get_course(course_id)
+        if not course:
+            return
+        course.video_path = video_path
+        # 仅当用户未自定义标题（占位"导入中…"）时才用视频原标题
+        if not course.title or course.title == "导入中…":
+            course.title = title
+        service.update_course(course)
+    except Exception as e:
+        service.update_status(course_id, "failed", f"导入失败：{e}")
+        return
+    _process_course(course_id)
+
+
+@router.post("/import", response_model=CourseCreateResponse)
+def import_course(payload: ImportRequest, background_tasks: BackgroundTasks):
+    """通过视频链接导入（yt-dlp 下载），后台下载+处理。"""
+    service = CourseService()
+    course = service.create_course(title=payload.title or "导入中…", video_path="", file_hash=None)
+    background_tasks.add_task(_import_course, course.id, payload.url)
     return CourseCreateResponse(
         id=course.id,
         title=course.title,
@@ -193,6 +235,86 @@ def stream_course_video(course_id: int, request: Request):
         media_type=media_type,
         headers=headers,
     )
+
+
+def _format_vtt_time(seconds: float) -> str:
+    """秒 -> WebVTT 时间戳 HH:MM:SS.mmm。"""
+    if seconds < 0:
+        seconds = 0
+    ms = int(round((seconds - int(seconds)) * 1000))
+    total = int(seconds)
+    if ms == 1000:  # 进位（如 1.9995 -> 2.000）
+        total += 1
+        ms = 0
+    h, rem = divmod(total, 3600)
+    m, s = divmod(rem, 60)
+    return f"{h:02d}:{m:02d}:{s:02d}.{ms:03d}"
+
+
+@router.get("/{course_id}/subtitles")
+def get_course_subtitles(course_id: int):
+    """返回课程字幕（WebVTT 格式），供 <video><track> 显示。"""
+    from sqlmodel import select
+
+    from backend.database import engine
+    from backend.models import Transcript
+    from sqlmodel import Session
+
+    service = CourseService()
+    if not service.get_course(course_id):
+        raise HTTPException(status_code=404, detail="课程不存在")
+
+    with Session(engine) as session:
+        rows = session.exec(
+            select(Transcript)
+            .where(Transcript.course_id == course_id)
+            .order_by(Transcript.start_time)
+        ).all()
+
+    lines = ["WEBVTT", ""]
+    for t in rows:
+        text = (t.text or "").strip()
+        if not text:
+            continue
+        lines.append(f"{_format_vtt_time(t.start_time)} --> {_format_vtt_time(t.end_time)}")
+        lines.append(text)
+        lines.append("")
+    vtt = "\n".join(lines)
+    return Response(content=vtt, media_type="text/vtt; charset=utf-8")
+
+
+@router.get("/{course_id}/chapters")
+def list_chapters(course_id: int):
+    """返回课程章节速览（首次调用自动生成并缓存）。"""
+    from backend.services.chapter_service import ChapterService
+
+    try:
+        chapters = ChapterService().list_chapters(course_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return [
+        {
+            "id": c.id,
+            "index": c.index,
+            "title": c.title,
+            "summary": c.summary,
+            "start_time": c.start_time,
+            "end_time": c.end_time,
+        }
+        for c in chapters
+    ]
+
+
+@router.get("/{course_id}/mindmap")
+def get_mindmap(course_id: int):
+    """返回课程思维导图树（首次调用自动生成并缓存）。"""
+    from backend.services.mindmap_service import MindMapService
+
+    try:
+        tree = MindMapService().get_or_generate(course_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return tree
 
 
 @router.delete("/{course_id}")

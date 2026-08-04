@@ -45,6 +45,14 @@ export interface ChatMessage {
   sources?: Source[] | null
   created_at?: string
   course_id?: number
+  conversation_id?: number
+  web_results?: string | null
+}
+
+export interface WebResult {
+  title: string
+  url: string
+  snippet: string
 }
 
 export interface ChatResponse {
@@ -52,6 +60,8 @@ export interface ChatResponse {
   answer: string
   sources: Source[] | null
   answer_message_id?: number
+  conversation_id?: number
+  web_results?: WebResult[] | null
 }
 
 export interface Settings {
@@ -79,6 +89,8 @@ export interface HistoryItem {
   /** set/all 实际涉及的课程 id 与名称（优先于锚点 course_title 显示） */
   course_ids?: number[]
   course_titles?: string[]
+  conversation_id?: number
+  conversation_title?: string
 }
 
 export interface TranscriptDebug {
@@ -119,14 +131,26 @@ export interface ChatDebug {
   created_at?: string
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    cache: "no-store",
-    headers: {
-      ...(options?.headers || {}),
-    },
-  })
+async function request<T>(path: string, options?: RequestInit, timeoutMs = 120000): Promise<T> {
+  // 超时保护：LLM 调用偶发卡死时避免无限转圈
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { ...(options?.headers || {}) },
+    })
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error("请求超时，请稍后重试（可能是 AI 服务繁忙）")
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
   if (!response.ok) {
     const text = await response.text().catch(() => "")
     throw new Error(`HTTP ${response.status}: ${text}`)
@@ -149,6 +173,15 @@ export async function uploadCourse(formData: FormData): Promise<{ id: number; ti
   })
 }
 
+/** 视频链接导入（yt-dlp 后台下载） */
+export async function importCourse(url: string, title?: string): Promise<{ id: number; title: string; status: string; created_at: string }> {
+  return request<{ id: number; title: string; status: string; created_at: string }>("/api/courses/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, title: title ?? null }),
+  })
+}
+
 export async function deleteCourse(id: number): Promise<void> {
   await request(`/api/courses/${id}`, { method: "DELETE" })
 }
@@ -166,12 +199,54 @@ export async function askQuestion(
   question: string,
   scope: ChatScope,
   courseIds?: number[],
+  image?: string,
+  conversationId?: number,
+  webSearch?: boolean,
 ): Promise<ChatResponse> {
   return request<ChatResponse>(`/api/chat/${courseId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, scope, course_ids: courseIds ?? null }),
+    body: JSON.stringify({
+      question,
+      scope,
+      course_ids: courseIds ?? null,
+      image: image ?? null,
+      conversation_id: conversationId ?? null,
+      web_search: webSearch ?? false,
+    }),
   })
+}
+
+// ---- 会话（Conversation）----
+
+export interface Conversation {
+  id: number
+  course_id: number
+  title: string
+  scope: ChatScope
+  course_ids: number[]
+  created_at: string
+  updated_at: string
+}
+
+export async function listConversations(courseId: number): Promise<Conversation[]> {
+  return request<Conversation[]>(`/api/courses/${courseId}/conversations`)
+}
+
+export async function getConversationMessages(conversationId: number): Promise<ChatMessage[]> {
+  return request<ChatMessage[]>(`/api/conversations/${conversationId}/messages`)
+}
+
+export async function renameConversation(conversationId: number, title: string): Promise<Conversation> {
+  return request<Conversation>(`/api/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  })
+}
+
+export async function deleteConversation(conversationId: number): Promise<void> {
+  await request(`/api/conversations/${conversationId}`, { method: "DELETE" })
 }
 
 // ---- 学习集（自定义课程组合）----
@@ -253,4 +328,368 @@ export async function getCourseSummaryDebug(courseId: number): Promise<SummaryDe
 
 export async function getChatDebug(messageId: number): Promise<ChatDebug> {
   return request<ChatDebug>(`/api/chat/${messageId}/debug`)
+}
+
+// ---- 测验（Question）----
+
+export interface Question {
+  id: number
+  type: "choice" | "judge"
+  question: string
+  options: string[] | null
+  answer: string
+  explanation: string | null
+  source_course_id: number | null
+  source_timestamp: number | null
+  /** 最近一次作答进度（断点续答）；未作答为 null */
+  last_answer?: string | null
+  last_correct?: boolean | null
+}
+
+export interface QuizGenerateResponse {
+  generated: number
+  total: number
+}
+
+export interface QuizAnswerResponse {
+  question_id: number
+  correct: boolean
+  answer: string
+  explanation: string | null
+}
+
+/** 错题本条目：历史答错记录，连续答对 N 次才标"已掌握"，记录保留 */
+export interface WrongQuestion extends Question {
+  mastered: boolean
+  wrong_count: number
+  /** 自最近一次答错起的连续答对数（掌握进度） */
+  streak: number
+  /** 连续答对多少次算掌握 */
+  master_streak: number
+}
+
+/** 范围参数：课程或学习集二选一 */
+export interface QuizScope {
+  courseId?: number
+  studySetId?: number
+}
+
+function scopeQuery(scope: QuizScope): string {
+  if (scope.studySetId != null) return `study_set_id=${scope.studySetId}`
+  return `course_id=${scope.courseId}`
+}
+
+export async function generateQuiz(scope: QuizScope, count = 12): Promise<QuizGenerateResponse> {
+  return request<QuizGenerateResponse>("/api/quiz/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      course_id: scope.courseId ?? null,
+      study_set_id: scope.studySetId ?? null,
+      count,
+    }),
+  })
+}
+
+export async function listQuiz(scope: QuizScope): Promise<Question[]> {
+  return request<Question[]>(`/api/quiz?${scopeQuery(scope)}`)
+}
+
+export async function listWrongQuiz(scope: QuizScope): Promise<WrongQuestion[]> {
+  return request<WrongQuestion[]>(`/api/quiz/wrong?${scopeQuery(scope)}`)
+}
+
+export async function clearWrongQuiz(scope: QuizScope): Promise<void> {
+  await request(`/api/quiz/wrong?${scopeQuery(scope)}`, { method: "DELETE" })
+}
+
+export async function submitQuizAnswer(questionId: number, answer: string): Promise<QuizAnswerResponse> {
+  return request<QuizAnswerResponse>(`/api/quiz/${questionId}/answer`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ answer }),
+  })
+}
+
+export async function clearQuiz(scope: QuizScope): Promise<void> {
+  await request(`/api/quiz?${scopeQuery(scope)}`, { method: "DELETE" })
+}
+
+// ---- 闪卡（Flashcard）----
+
+export type Familiarity = "known" | "fuzzy" | "unknown"
+
+export interface Flashcard {
+  id: number
+  front: string
+  back: string
+  familiarity: Familiarity
+  source_course_id: number | null
+  source_timestamp: number | null
+  // SM-2 调度
+  ease: number
+  interval_days: number
+  repetitions: number
+  due_date: string
+  last_reviewed_at: string | null
+}
+
+export interface FlashcardGenerateResponse {
+  generated: number
+  total: number
+}
+
+export interface FlashcardStats {
+  total: number
+  known: number
+  fuzzy: number
+  unknown: number
+  due: number
+}
+
+export async function generateFlashcards(scope: QuizScope, count = 15): Promise<FlashcardGenerateResponse> {
+  return request<FlashcardGenerateResponse>("/api/flashcards/generate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      course_id: scope.courseId ?? null,
+      study_set_id: scope.studySetId ?? null,
+      count,
+    }),
+  })
+}
+
+export async function listFlashcards(scope: QuizScope): Promise<Flashcard[]> {
+  return request<Flashcard[]>(`/api/flashcards?${scopeQuery(scope)}`)
+}
+
+/** 待复习队列（已到期） */
+export async function getDueFlashcards(scope: QuizScope): Promise<Flashcard[]> {
+  return request<Flashcard[]>(`/api/flashcards/due?${scopeQuery(scope)}`)
+}
+
+export async function getFlashcardStats(scope: QuizScope): Promise<FlashcardStats> {
+  return request<FlashcardStats>(`/api/flashcards/stats?${scopeQuery(scope)}`)
+}
+
+export async function setFlashcardFamiliarity(flashcardId: number, familiarity: Familiarity): Promise<Flashcard> {
+  return request<Flashcard>(`/api/flashcards/${flashcardId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ familiarity }),
+  })
+}
+
+/** SM-2 复习：quality 0-5 */
+export async function reviewFlashcard(flashcardId: number, quality: number): Promise<Flashcard> {
+  return request<Flashcard>(`/api/flashcards/${flashcardId}/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ quality }),
+  })
+}
+
+export async function clearFlashcards(scope: QuizScope): Promise<void> {
+  await request(`/api/flashcards?${scopeQuery(scope)}`, { method: "DELETE" })
+}
+
+// ---- 笔记/书签（Note）----
+
+export type NoteKind = "note" | "bookmark"
+
+export interface Note {
+  id: number
+  course_id: number
+  kind: NoteKind
+  content: string
+  timestamp: number
+  created_at: string
+  updated_at: string
+}
+
+export async function listNotes(courseId: number): Promise<Note[]> {
+  return request<Note[]>(`/api/notes?course_id=${courseId}`)
+}
+
+export async function createNote(payload: {
+  course_id: number
+  kind: NoteKind
+  content?: string
+  timestamp: number
+}): Promise<Note> {
+  return request<Note>("/api/notes", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateNote(noteId: number, content: string): Promise<Note> {
+  return request<Note>(`/api/notes/${noteId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ content }),
+  })
+}
+
+export async function deleteNote(noteId: number): Promise<void> {
+  await request(`/api/notes/${noteId}`, { method: "DELETE" })
+}
+
+// ---- 学伴角色（Companion Character）----
+
+export interface Character {  id: string
+  name: string
+  catchphrases: {
+    correct?: string
+    wrong?: string
+    greeting?: string
+    celebrate?: string
+  }
+  persona_prompt: string
+  voice: { provider?: string; voice_id?: string }
+  motions: string[]
+  /** 各动作槽是否有素材（前端据此降级占位） */
+  motion_assets: Record<string, boolean>
+  has_assets: boolean
+}
+
+export async function listCharacters(): Promise<Character[]> {
+  return request<Character[]>("/api/characters")
+}
+
+export async function getCharacter(id: string): Promise<Character> {
+  return request<Character>(`/api/characters/${id}`)
+}
+
+/** 角色某动作的形象素材 URL */
+export function getCharacterAssetUrl(characterId: string, motion: string): string {
+  return `${API_BASE}/api/characters/${characterId}/assets/${motion}`
+}
+
+/** 课程字幕 WebVTT URL */
+export function getSubtitlesUrl(courseId: number): string {
+  return `${API_BASE}/api/courses/${courseId}/subtitles`
+}
+
+// ---- 导出（Export）----
+
+export type ExportKind = "flashcards" | "wrong-questions"
+
+/** 导出文件下载 URL（浏览器直接下载） */
+export function getExportUrl(kind: ExportKind, scope: QuizScope, format: string): string {
+  return `${API_BASE}/api/export/${kind}?${scopeQuery(scope)}&format=${format}`
+}
+
+/** 触发浏览器下载导出文件 */
+export function downloadExport(kind: ExportKind, scope: QuizScope, format: string, filename: string): void {
+  const a = document.createElement("a")
+  a.href = getExportUrl(kind, scope, format)
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+}
+
+// ---- 学习打卡统计（Streak）----
+
+export interface StudyStats {
+  streak: number
+  total_days: number
+  today_active: boolean
+  /** 最近 30 天有学习活动的日期（ISO yyyy-mm-dd） */
+  recent: string[]
+}
+
+export async function getStudyStats(): Promise<StudyStats> {
+  return request<StudyStats>("/api/study-stats")
+}
+
+// ---- 掌握度仪表盘（Dashboard）----
+
+export interface Dashboard {
+  quiz: { total_attempts: number; correct: number; accuracy: number }
+  flashcards: { total: number; known: number; fuzzy: number; unknown: number }
+  wrong: { total: number; unmastered: number; mastered: number }
+  notes: number
+  courses_completed: number
+}
+
+export async function getDashboard(): Promise<Dashboard> {
+  return request<Dashboard>("/api/dashboard")
+}
+
+// ---- 学习周报（Weekly Report）----
+
+export interface WeeklyReport {
+  window_days: number
+  quiz: { attempts: number; correct: number; accuracy: number }
+  flashcards_generated: number
+  notes: number
+  questions: number
+  study_days: number
+}
+
+export async function getWeeklyReport(): Promise<WeeklyReport> {
+  return request<WeeklyReport>("/api/weekly-report")
+}
+
+// ---- 时间段总结（Segment Summary）----
+
+export interface SegmentSummary {
+  summary: string
+  start: number
+  end: number
+  segment_count: number
+}
+
+export async function summarizeSegment(
+  courseId: number,
+  start: number,
+  end: number
+): Promise<SegmentSummary> {
+  return request<SegmentSummary>("/api/segment/summarize", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ course_id: courseId, start, end }),
+  })
+}
+
+// ---- 本章节速览（Chapters）----
+
+export interface Chapter {
+  id: number
+  index: number
+  title: string
+  summary: string
+  start_time: number
+  end_time: number
+}
+
+export async function getChapters(courseId: number): Promise<Chapter[]> {
+  return request<Chapter[]>(`/api/courses/${courseId}/chapters`)
+}
+
+// ---- 思维导图（MindMap）----
+
+export interface MindMapNode {
+  title: string
+  children?: MindMapNode[]
+}
+
+export async function getMindMap(courseId: number): Promise<MindMapNode> {
+  return request<MindMapNode>(`/api/courses/${courseId}/mindmap`)
+}
+
+/** TTS：文本转语音，返回音频 Blob（MP3），音色随角色 */
+export async function synthesizeSpeech(text: string, characterId?: string): Promise<Blob> {
+  const response = await fetch(`${API_BASE}/api/characters/tts`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, character_id: characterId ?? null }),
+  })
+  if (!response.ok) {
+    throw new Error(`TTS 失败: HTTP ${response.status}`)
+  }
+  return response.blob()
 }

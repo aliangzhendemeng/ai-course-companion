@@ -6,16 +6,18 @@ import ReactMarkdown from "react-markdown"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ChaptersPanel } from "@/components/ChaptersPanel"
 import type { Summary } from "@/lib/api"
 
 interface SummaryTabsProps {
   summary?: Summary
   isLoading: boolean
+  courseId: number
   onSeek?: (timestamp: number) => void
 }
 
-export function SummaryTabs({ summary, isLoading, onSeek }: SummaryTabsProps) {
-  const [activeTab, setActiveTab] = useState("outline")
+export function SummaryTabs({ summary, isLoading, courseId, onSeek }: SummaryTabsProps) {
+  const [activeTab, setActiveTab] = useState("abstract")
 
   if (isLoading) {
     return (
@@ -37,53 +39,22 @@ export function SummaryTabs({ summary, isLoading, onSeek }: SummaryTabsProps) {
   return (
     <Tabs value={activeTab} onValueChange={setActiveTab} className="flex h-full flex-col">
       <TabsList className="grid w-full grid-cols-3">
-        <TabsTrigger value="outline">大纲</TabsTrigger>
         <TabsTrigger value="abstract">摘要</TabsTrigger>
         <TabsTrigger value="notes">讲义</TabsTrigger>
+        <TabsTrigger value="chapters">章节速览</TabsTrigger>
       </TabsList>
       <ScrollArea className="mt-4 flex-1">
-        <TabsContent value="outline" className="mt-0">
-          <OutlineContent outline={summary.outline || ""} onSeek={onSeek} />
-        </TabsContent>
         <TabsContent value="abstract" className="mt-0">
           <MarkdownContent content={summary.abstract || "暂无摘要"} />
         </TabsContent>
         <TabsContent value="notes" className="mt-0">
           <MarkdownContent content={summary.lecture_notes || "暂无讲义"} />
         </TabsContent>
+        <TabsContent value="chapters" className="mt-0">
+          <ChaptersPanel courseId={courseId} onSeek={onSeek} />
+        </TabsContent>
       </ScrollArea>
     </Tabs>
-  )
-}
-
-function OutlineContent({ outline, onSeek }: { outline: string; onSeek?: (timestamp: number) => void }) {
-  const lines = outline.split("\n").filter(Boolean)
-  return (
-    <ul className="space-y-2">
-      {lines.map((line, idx) => {
-        const match = line.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*[\-\.]?\s*(.*)$/)
-        if (match) {
-          const h = parseInt(match[1], 10)
-          const m = parseInt(match[2], 10)
-          const s = match[3] ? parseInt(match[3], 10) : 0
-          const seconds = h * 3600 + m * 60 + s
-          const text = match[4] || line
-          return (
-            <li key={idx}>
-              <button
-                onClick={() => onSeek?.(seconds)}
-                className="text-left text-sm text-accent hover:underline"
-              >
-                {line.trim()}
-              </button>
-            </li>
-          )
-        }
-        return (
-          <li key={idx} className="text-sm text-foreground">{line.trim()}</li>
-        )
-      })}
-    </ul>
   )
 }
 
