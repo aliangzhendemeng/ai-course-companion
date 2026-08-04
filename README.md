@@ -16,6 +16,12 @@
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
+
+# 网络查询功能需要浏览器（首次安装，约 100MB）
+playwright install chromium
+
+# 前端依赖
+cd frontend-next && npm install && cd ..
 ```
 
 ### 2. 配置环境变量
@@ -93,6 +99,18 @@ ai-course-companion/
 - 支持格式：mp4、mkv、mov、avi
 - 最大支持 2GB，适合 45 分钟左右的慕课视频
 - 上传后会在后台异步完成字幕提取、关键帧分析和总结生成
+
+## 换设备 / 数据迁移
+
+仓库已包含：
+- **学习数据库** `data/app.db`（问答/闪卡/错题/笔记/会话等学习记录）
+- **学伴素材** `assets/characters/`（咕咕嘎嘎 GIF + meta.json 配置）
+
+换设备 clone 后，学习记录和学伴形象都直接可用。仅需：
+1. 按上面步骤装依赖 + 配 `.env`（填你的 API key）
+2. `data/app.db` 已含历史课程/问答数据；**视频文件本身**（data/uploads）不入库，如需播放原视频需重新上传/导入对应课程
+
+> 注：`.env`（含真实 API key）不入库，换设备需重新填写。学伴 GIF 为第三方 IP，仅供个人学习使用。
 
 ## 常见问题
 
