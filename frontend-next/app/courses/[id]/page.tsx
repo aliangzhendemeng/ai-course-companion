@@ -155,7 +155,7 @@ export default function CourseDetailPage() {
               isLoading={convLoading || askMutation.isPending}
               sessionMode
               title={currentConv?.title ?? "新对话"}
-              onSend={(question, _scope, _courseIds, image) =>
+              onSend={(question, _scope, _courseIds, image, webSearch) =>
                 askMutation.mutate(
                   {
                     courseId,
@@ -163,6 +163,7 @@ export default function CourseDetailPage() {
                     scope: "course",
                     image,
                     conversationId: activeConvId ?? undefined,
+                    webSearch,
                   },
                   {
                     onSuccess: (data) => {

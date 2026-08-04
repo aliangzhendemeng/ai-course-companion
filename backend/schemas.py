@@ -59,6 +59,13 @@ class ChatRequest(BaseModel):
     course_ids: list[int] | None = None  # scope="set" 时指定的课程集合
     image: str | None = None  # 上传图片（base64 data url），有图走视觉问答
     conversation_id: int | None = None  # 续写某会话；不传则新建
+    web_search: bool = False  # 是否联网搜索补充
+
+
+class WebResult(BaseModel):
+    title: str
+    url: str
+    snippet: str = ""
 
 
 class ChatResponse(BaseModel):
@@ -67,6 +74,7 @@ class ChatResponse(BaseModel):
     sources: list[Source] | None
     answer_message_id: int | None = None
     conversation_id: int | None = None  # 本次问答所属会话（新建或续写）
+    web_results: list[WebResult] | None = None  # 联网搜索结果
 
 
 class ConversationItem(BaseModel):
@@ -163,6 +171,12 @@ class FlashcardItem(BaseModel):
     familiarity: str  # known | fuzzy | unknown
     source_course_id: int | None = None
     source_timestamp: float | None = None
+    # SM-2 调度
+    ease: float = 2.5
+    interval_days: int = 0
+    repetitions: int = 0
+    due_date: datetime
+    last_reviewed_at: datetime | None = None
 
 
 class FlashcardGenerateRequest(BaseModel):
@@ -180,11 +194,16 @@ class FlashcardFamiliarityRequest(BaseModel):
     familiarity: str  # known | fuzzy | unknown
 
 
+class FlashcardReviewRequest(BaseModel):
+    quality: int  # 0-5，回忆质量（<3 答错重置）
+
+
 class FlashcardStats(BaseModel):
     total: int
     known: int
     fuzzy: int
     unknown: int
+    due: int = 0  # 待复习数
 
 
 # ===== 笔记/书签（Note）=====

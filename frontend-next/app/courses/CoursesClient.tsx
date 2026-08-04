@@ -12,7 +12,7 @@ import { StudySetStudyPanel } from "@/components/StudySetStudyPanel"
 import { StreakCard } from "@/components/StreakCard"
 import { DashboardPanel } from "@/components/DashboardPanel"
 import { WeeklyReport } from "@/components/WeeklyReport"
-import { useCourses, useUploadCourse, useDeleteCourse, useReprocessCourse } from "@/hooks/use-api"
+import { useCourses, useUploadCourse, useImportCourse, useDeleteCourse, useReprocessCourse } from "@/hooks/use-api"
 import type { Course } from "@/lib/api"
 
 interface CoursesClientProps {
@@ -36,6 +36,7 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
     },
   })
   const uploadMutation = useUploadCourse()
+  const importMutation = useImportCourse()
   const deleteMutation = useDeleteCourse()
   const reprocessMutation = useReprocessCourse()
 
@@ -53,6 +54,10 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
     }
   }
 
+  const handleImport = async (url: string, title?: string) => {
+    await importMutation.mutateAsync({ url, title })
+  }
+
   return (
     <div className="container mx-auto p-6 pb-40">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -62,7 +67,12 @@ export function CoursesClient({ initialCourses }: CoursesClientProps) {
             共 {courses?.length || 0} 门课程，{completedCount} 门已完成
           </p>
         </div>
-        <UploadModal onUpload={handleUpload} isLoading={isUploading}>
+        <UploadModal
+          onUpload={handleUpload}
+          onImport={handleImport}
+          isLoading={isUploading}
+          isImporting={importMutation.isPending}
+        >
           <Button disabled={isUploading} size="sm" className="gap-1.5">
             {isUploading ? (
               <Loader2 className="h-4 w-4 animate-spin" />

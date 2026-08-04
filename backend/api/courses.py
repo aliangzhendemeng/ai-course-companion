@@ -7,6 +7,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, BackgroundTasks, Request
 from fastapi.responses import Response, StreamingResponse
+from pydantic import BaseModel
 
 from backend.ai.processor import VideoProcessor
 from backend.config import settings
@@ -14,6 +15,11 @@ from backend.schemas import CourseCreateResponse, CourseDetail, CourseListItem
 from backend.services.course_service import CourseService
 
 router = APIRouter()
+
+
+class ImportRequest(BaseModel):
+    url: str
+    title: str | None = None
 
 
 def _process_course(course_id: int) -> None:
@@ -95,6 +101,42 @@ def upload_course(
     # 后台处理：延迟初始化 VideoProcessor，避免阻塞上传响应
     background_tasks.add_task(_process_course, course.id)
 
+    return CourseCreateResponse(
+        id=course.id,
+        title=course.title,
+        status=course.status,
+        created_at=course.created_at,
+    )
+
+
+def _import_course(course_id: int, url: str) -> None:
+    """后台：从 URL 下载视频 → 回填路径/标题 → 复用现有处理流程。"""
+    from backend.services.video_import_service import VideoImportService
+
+    service = CourseService()
+    try:
+        service.update_status(course_id, "downloading", "正在下载视频…")
+        title, video_path = VideoImportService().download(url, course_id)
+        course = service.get_course(course_id)
+        if not course:
+            return
+        course.video_path = video_path
+        # 仅当用户未自定义标题（占位"导入中…"）时才用视频原标题
+        if not course.title or course.title == "导入中…":
+            course.title = title
+        service.update_course(course)
+    except Exception as e:
+        service.update_status(course_id, "failed", f"导入失败：{e}")
+        return
+    _process_course(course_id)
+
+
+@router.post("/import", response_model=CourseCreateResponse)
+def import_course(payload: ImportRequest, background_tasks: BackgroundTasks):
+    """通过视频链接导入（yt-dlp 下载），后台下载+处理。"""
+    service = CourseService()
+    course = service.create_course(title=payload.title or "导入中…", video_path="", file_hash=None)
+    background_tasks.add_task(_import_course, course.id, payload.url)
     return CourseCreateResponse(
         id=course.id,
         title=course.title,

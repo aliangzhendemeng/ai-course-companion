@@ -47,6 +47,7 @@ class ChatService:
         course_ids: list[int] | None = None,
         image: str | None = None,
         conversation_id: int | None = None,
+        web_search: bool = False,
     ) -> dict:
         """提问并返回答案。支持多轮会话：传 conversation_id 续写（带历史上下文），
         不传则新建会话。
@@ -104,6 +105,11 @@ class ChatService:
             conversation_id = conv.id
 
         cids_str = json.dumps(involved_ids) if involved_ids else None
+        # 联网搜索（在保存消息前查，便于存到 assistant 消息）
+        web_results: list[dict] = []
+        if web_search:
+            from backend.services.web_search_service import WebSearchService
+            web_results = WebSearchService().search(question)
         with Session(engine) as session:
             user_msg = ChatMessage(
                 course_id=course_id,
@@ -122,6 +128,7 @@ class ChatService:
                 course_ids=cids_str,
                 sources=json.dumps(result["sources"], ensure_ascii=False),
                 debug_info=json.dumps(result.get("debug", {}), ensure_ascii=False),
+                web_results=json.dumps(web_results, ensure_ascii=False) if web_results else None,
             )
             session.add(user_msg)
             session.add(assistant_msg)
@@ -129,7 +136,12 @@ class ChatService:
             session.refresh(assistant_msg)
 
         conv_svc.touch(conversation_id)
-        return {**result, "answer_message_id": assistant_msg.id, "conversation_id": conversation_id}
+        return {
+            **result,
+            "answer_message_id": assistant_msg.id,
+            "conversation_id": conversation_id,
+            "web_results": web_results,
+        }
 
     # ----- 图片问答 -----
 

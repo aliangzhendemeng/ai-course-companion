@@ -11,6 +11,7 @@ import {
   listCourses,
   getCourse,
   uploadCourse,
+  importCourse,
   deleteCourse,
   reprocessCourse,
   getSummary,
@@ -36,8 +37,10 @@ import {
   clearQuiz,
   generateFlashcards,
   listFlashcards,
+  getDueFlashcards,
   getFlashcardStats,
   setFlashcardFamiliarity,
+  reviewFlashcard,
   clearFlashcards,
   listCharacters,
   getStudyStats,
@@ -133,6 +136,16 @@ export function useUploadCourse() {
   })
 }
 
+export function useImportCourse() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ url, title }: { url: string; title?: string }) => importCourse(url, title),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["courses"] })
+    },
+  })
+}
+
 export function useDeleteCourse() {
   const queryClient = useQueryClient()
   return useMutation({
@@ -156,8 +169,8 @@ export function useReprocessCourse() {
 
 export function useAskQuestion() {
   const queryClient = useQueryClient()
-  return useMutation<ChatResponse, Error, { courseId: number; question: string; scope: ChatScope; courseIds?: number[]; image?: string; conversationId?: number }>({
-    mutationFn: ({ courseId, question, scope, courseIds, image, conversationId }) => askQuestion(courseId, question, scope, courseIds, image, conversationId),
+  return useMutation<ChatResponse, Error, { courseId: number; question: string; scope: ChatScope; courseIds?: number[]; image?: string; conversationId?: number; webSearch?: boolean }>({
+    mutationFn: ({ courseId, question, scope, courseIds, image, conversationId, webSearch }) => askQuestion(courseId, question, scope, courseIds, image, conversationId, webSearch),
     onSuccess: (data, variables) => {
       // 失效当前会话消息 + 该课程会话列表 + 全局历史
       if (data.conversation_id) {
@@ -300,8 +313,9 @@ export function useSubmitQuizAnswer() {
     mutationFn: ({ questionId, answer }) => submitQuizAnswer(questionId, answer),
     onSuccess: (_, variables) => {
       if (variables.scope) {
-        // 作答影响错题本，刷新它
-        queryClient.invalidateQueries({ queryKey: [...quizKey(variables.scope), "wrong"] })
+        // 刷新题目列表（含 last_answer/last_correct 进度）和错题本
+        // quizKey 是前缀，会同时匹配 [...,"wrong"]
+        queryClient.invalidateQueries({ queryKey: quizKey(variables.scope) })
       }
     },
   })
@@ -356,6 +370,24 @@ export function useSetFlashcardFamiliarity() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: flashcardKey(variables.scope) })
     },
+  })
+}
+
+export function useReviewFlashcard() {
+  const queryClient = useQueryClient()
+  return useMutation<Flashcard, Error, { scope: QuizScope; flashcardId: number; quality: number }>({
+    mutationFn: ({ flashcardId, quality }) => reviewFlashcard(flashcardId, quality),
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: flashcardKey(variables.scope) })
+    },
+  })
+}
+
+export function useDueFlashcards(scope: QuizScope, options?: Partial<UseQueryOptions<Flashcard[], Error>>) {
+  return useQuery<Flashcard[], Error>({
+    queryKey: [...flashcardKey(scope), "due"],
+    queryFn: () => getDueFlashcards(scope),
+    ...options,
   })
 }
 

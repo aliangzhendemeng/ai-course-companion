@@ -46,6 +46,13 @@ export interface ChatMessage {
   created_at?: string
   course_id?: number
   conversation_id?: number
+  web_results?: string | null
+}
+
+export interface WebResult {
+  title: string
+  url: string
+  snippet: string
 }
 
 export interface ChatResponse {
@@ -54,6 +61,7 @@ export interface ChatResponse {
   sources: Source[] | null
   answer_message_id?: number
   conversation_id?: number
+  web_results?: WebResult[] | null
 }
 
 export interface Settings {
@@ -123,14 +131,26 @@ export interface ChatDebug {
   created_at?: string
 }
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    cache: "no-store",
-    headers: {
-      ...(options?.headers || {}),
-    },
-  })
+async function request<T>(path: string, options?: RequestInit, timeoutMs = 120000): Promise<T> {
+  // 超时保护：LLM 调用偶发卡死时避免无限转圈
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let response: Response
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      cache: "no-store",
+      signal: controller.signal,
+      headers: { ...(options?.headers || {}) },
+    })
+  } catch (e) {
+    if (e instanceof DOMException && e.name === "AbortError") {
+      throw new Error("请求超时，请稍后重试（可能是 AI 服务繁忙）")
+    }
+    throw e
+  } finally {
+    clearTimeout(timer)
+  }
   if (!response.ok) {
     const text = await response.text().catch(() => "")
     throw new Error(`HTTP ${response.status}: ${text}`)
@@ -153,6 +173,15 @@ export async function uploadCourse(formData: FormData): Promise<{ id: number; ti
   })
 }
 
+/** 视频链接导入（yt-dlp 后台下载） */
+export async function importCourse(url: string, title?: string): Promise<{ id: number; title: string; status: string; created_at: string }> {
+  return request<{ id: number; title: string; status: string; created_at: string }>("/api/courses/import", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ url, title: title ?? null }),
+  })
+}
+
 export async function deleteCourse(id: number): Promise<void> {
   await request(`/api/courses/${id}`, { method: "DELETE" })
 }
@@ -172,6 +201,7 @@ export async function askQuestion(
   courseIds?: number[],
   image?: string,
   conversationId?: number,
+  webSearch?: boolean,
 ): Promise<ChatResponse> {
   return request<ChatResponse>(`/api/chat/${courseId}`, {
     method: "POST",
@@ -182,6 +212,7 @@ export async function askQuestion(
       course_ids: courseIds ?? null,
       image: image ?? null,
       conversation_id: conversationId ?? null,
+      web_search: webSearch ?? false,
     }),
   })
 }
@@ -395,6 +426,12 @@ export interface Flashcard {
   familiarity: Familiarity
   source_course_id: number | null
   source_timestamp: number | null
+  // SM-2 调度
+  ease: number
+  interval_days: number
+  repetitions: number
+  due_date: string
+  last_reviewed_at: string | null
 }
 
 export interface FlashcardGenerateResponse {
@@ -407,6 +444,7 @@ export interface FlashcardStats {
   known: number
   fuzzy: number
   unknown: number
+  due: number
 }
 
 export async function generateFlashcards(scope: QuizScope, count = 15): Promise<FlashcardGenerateResponse> {
@@ -425,6 +463,11 @@ export async function listFlashcards(scope: QuizScope): Promise<Flashcard[]> {
   return request<Flashcard[]>(`/api/flashcards?${scopeQuery(scope)}`)
 }
 
+/** 待复习队列（已到期） */
+export async function getDueFlashcards(scope: QuizScope): Promise<Flashcard[]> {
+  return request<Flashcard[]>(`/api/flashcards/due?${scopeQuery(scope)}`)
+}
+
 export async function getFlashcardStats(scope: QuizScope): Promise<FlashcardStats> {
   return request<FlashcardStats>(`/api/flashcards/stats?${scopeQuery(scope)}`)
 }
@@ -434,6 +477,15 @@ export async function setFlashcardFamiliarity(flashcardId: number, familiarity: 
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ familiarity }),
+  })
+}
+
+/** SM-2 复习：quality 0-5 */
+export async function reviewFlashcard(flashcardId: number, quality: number): Promise<Flashcard> {
+  return request<Flashcard>(`/api/flashcards/${flashcardId}/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ quality }),
   })
 }
 

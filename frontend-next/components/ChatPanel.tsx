@@ -18,13 +18,13 @@ import { StudySetPicker } from "@/components/StudySetPicker"
 import { useSpeechInput } from "@/hooks/use-speech-input"
 import { useCompanion } from "@/components/companion/CompanionContext"
 import { deduplicateSources, formatTimestamp } from "@/lib/timestamp"
-import type { Source, ChatMessage, ChatScope } from "@/lib/api"
+import type { Source, ChatMessage, ChatScope, WebResult } from "@/lib/api"
 
 interface ChatPanelProps {
   courseId: number
   messages: ChatMessage[]
   isLoading?: boolean
-  onSend: (question: string, scope: ChatScope, courseIds?: number[], image?: string) => void
+  onSend: (question: string, scope: ChatScope, courseIds?: number[], image?: string, webSearch?: boolean) => void
   onSeek?: (timestamp: number, courseId?: number) => void
   defaultScope?: ChatScope
   lockScope?: boolean
@@ -53,6 +53,8 @@ export function ChatPanel({
   const [setCourseIds, setSetCourseIds] = useState<number[]>([])
   // 上传图片（base64 data url）
   const [image, setImage] = useState<string | null>(null)
+  // 联网搜索开关
+  const [webSearch, setWebSearch] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -76,7 +78,7 @@ export function ChatPanel({
   const handleSend = () => {
     const question = input.trim()
     if ((!question && !image) || isLoading) return
-    onSend(question || "请看看这张图片", scope, scope === "set" ? setCourseIds : undefined, image ?? undefined)
+    onSend(question || "请看看这张图片", scope, scope === "set" ? setCourseIds : undefined, image ?? undefined, webSearch || undefined)
     setInput("")
     setImage(null)
     if (fileInputRef.current) fileInputRef.current.value = ""
@@ -221,6 +223,16 @@ export function ChatPanel({
           />
           <Button
             size="icon"
+            variant={webSearch ? "default" : "outline"}
+            className="h-auto shrink-0"
+            onClick={() => setWebSearch((v) => !v)}
+            title="联网搜索（回答时额外查网络）"
+            type="button"
+          >
+            <Globe className="h-4 w-4" />
+          </Button>
+          <Button
+            size="icon"
             variant="outline"
             className="h-auto shrink-0"
             onClick={() => fileInputRef.current?.click()}
@@ -284,6 +296,7 @@ function MessageBubble({
   const isUser = message.role === "user"
   const sources = normalizeSources(message.sources)
   const groups = deduplicateSources(sources)
+  const webResults = normalizeWebResults(message.web_results)
   // 正文 [N] 引用角标 ↔ 来源列表：sources 已按编号顺序（sources[N-1] 即 [N]）
   const [activeSource, setActiveSource] = useState<number | null>(null)
   const sourceRefs = useRef<(HTMLLIElement | null)[]>([])
@@ -345,6 +358,28 @@ function MessageBubble({
             </ol>
           </div>
         ) : null}
+        {!isUser && webResults.length > 0 ? (
+          <div className="mt-3 space-y-1.5">
+            <p className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+              <Globe className="h-3 w-3" /> 网络参考
+            </p>
+            <ul className="flex flex-col gap-1.5">
+              {webResults.map((w, idx) => (
+                <li key={idx} className="rounded-lg border bg-muted/40 p-2 text-xs">
+                  <a
+                    href={w.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {w.title}
+                  </a>
+                  {w.snippet && <p className="mt-0.5 line-clamp-2 text-muted-foreground">{w.snippet}</p>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
       </div>
     </div>
   )
@@ -362,6 +397,17 @@ function normalizeSources(sources: ChatMessage["sources"]): Source[] {
     }
   }
   return []
+}
+
+function normalizeWebResults(raw: ChatMessage["web_results"]): WebResult[] {
+  if (!raw) return []
+  if (Array.isArray(raw)) return raw
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
 }
 
 function SourceChip({

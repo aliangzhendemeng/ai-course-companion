@@ -105,6 +105,7 @@ class ChatMessage(SQLModel, table=True):
     course_ids: Optional[str] = None  # JSON 数组：set/all 实际涉及的课程 id
     sources: Optional[str] = None  # JSON 字符串
     debug_info: Optional[str] = None  # JSON 字符串：prompt、context、model、raw_answer
+    web_results: Optional[str] = None  # JSON 字符串：联网搜索结果 [{title,url,snippet}]
     created_at: datetime = Field(default_factory=_utcnow)
 
     course: Course = Relationship(back_populates="chat_messages")
@@ -188,6 +189,12 @@ class Flashcard(SQLModel, table=True):
     source_course_id: Optional[int] = Field(default=None, index=True)
     source_timestamp: Optional[float] = None
     created_at: datetime = Field(default_factory=_utcnow)
+    # SM-2 间隔重复调度字段
+    ease: float = Field(default=2.5)  # 易度因子（1.3~∞，越高越熟）
+    interval_days: int = Field(default=0)  # 当前间隔（天）
+    repetitions: int = Field(default=0)  # 连续答对次数
+    due_date: datetime = Field(default_factory=_utcnow, index=True)  # 下次到期复习时间
+    last_reviewed_at: Optional[datetime] = Field(default=None)  # 上次复习时间
 
 
 class Note(SQLModel, table=True):

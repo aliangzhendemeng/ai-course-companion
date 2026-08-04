@@ -26,6 +26,18 @@ def create_db_and_tables() -> None:
     SQLModel.metadata.create_all(engine)
     _migrate_add_columns()
     _migrate_conversations()
+    _migrate_backfill_flashcard_due()
+
+
+def _migrate_backfill_flashcard_due() -> None:
+    """旧闪卡迁移加 due_date 列时为 NULL，回填为 created_at（视为已到期可复习）。幂等。"""
+    from sqlalchemy import text
+
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE flashcard SET due_date = created_at WHERE due_date IS NULL"))
+        conn.execute(text("UPDATE flashcard SET ease = 2.5 WHERE ease IS NULL"))
+        conn.execute(text("UPDATE flashcard SET interval_days = 0 WHERE interval_days IS NULL"))
+        conn.execute(text("UPDATE flashcard SET repetitions = 0 WHERE repetitions IS NULL"))
 
 
 # 增量列迁移：(表名, 列名, 列定义)。已存在的列会被跳过。
@@ -35,6 +47,12 @@ _ADD_COLUMN_MIGRATIONS: list[tuple[str, str, str]] = [
     ("question", "cleared_at", "DATETIME"),
     ("questionattempt", "question_generated_at", "DATETIME"),
     ("chatmessage", "conversation_id", "INTEGER"),
+    ("flashcard", "ease", "FLOAT"),
+    ("flashcard", "interval_days", "INTEGER"),
+    ("flashcard", "repetitions", "INTEGER"),
+    ("flashcard", "due_date", "DATETIME"),
+    ("flashcard", "last_reviewed_at", "DATETIME"),
+    ("chatmessage", "web_results", "VARCHAR"),
 ]
 
 

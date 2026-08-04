@@ -47,6 +47,7 @@ def get_conversation_messages(conversation_id: int):
             "scope": m.scope,
             "sources": m.sources,
             "created_at": m.created_at,
+            "web_results": m.web_results,
         }
         for m in msgs
     ]

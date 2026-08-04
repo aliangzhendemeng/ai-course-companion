@@ -59,6 +59,7 @@ def list_history():
                     "created_at": _to_utc_iso(msg.created_at),
                     "conversation_id": msg.conversation_id,
                     "conversation_title": conv_title,
+                    "web_results": msg.web_results,
                 }
             )
         return items

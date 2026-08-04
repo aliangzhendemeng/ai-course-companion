@@ -8,6 +8,7 @@ from backend.schemas import (
     FlashcardGenerateRequest,
     FlashcardGenerateResponse,
     FlashcardItem,
+    FlashcardReviewRequest,
     FlashcardStats,
 )
 from backend.services.flashcard_service import FlashcardService
@@ -23,6 +24,12 @@ def _to_item(c) -> FlashcardItem:
         familiarity=c.familiarity,
         source_course_id=c.source_course_id,
         source_timestamp=c.source_timestamp,
+        # 旧卡迁移加列时 SM-2 字段可能为 NULL，兜底默认值
+        ease=c.ease if c.ease is not None else 2.5,
+        interval_days=c.interval_days or 0,
+        repetitions=c.repetitions or 0,
+        due_date=c.due_date or c.created_at,
+        last_reviewed_at=c.last_reviewed_at,
     )
 
 
@@ -44,21 +51,41 @@ def generate_flashcards(payload: FlashcardGenerateRequest):
 
 
 @router.get("", response_model=list[FlashcardItem])
-def list_flashcards(course_id: int | None = None, study_set_id: int | None = None):
-    """列出某范围的全部闪卡。"""
+def list_flashcards(
+    course_id: int | None = None,
+    study_set_id: int | None = None,
+    due_only: bool = False,
+):
+    """列出某范围的全部闪卡；due_only=True 只返回已到期待复习。"""
     if course_id is None and study_set_id is None:
         raise HTTPException(status_code=400, detail="需提供 course_id 或 study_set_id")
     service = FlashcardService()
-    return [_to_item(c) for c in service.list_cards(course_id, study_set_id)]
+    cards = (
+        service.due_queue(course_id, study_set_id)
+        if due_only
+        else service.list_cards(course_id, study_set_id)
+    )
+    return [_to_item(c) for c in cards]
+
+
+@router.get("/due", response_model=list[FlashcardItem])
+def due_flashcards(course_id: int | None = None, study_set_id: int | None = None):
+    """今日待复习队列（已到期）。"""
+    if course_id is None and study_set_id is None:
+        raise HTTPException(status_code=400, detail="需提供 course_id 或 study_set_id")
+    service = FlashcardService()
+    return [_to_item(c) for c in service.due_queue(course_id, study_set_id)]
 
 
 @router.get("/stats", response_model=FlashcardStats)
 def flashcard_stats(course_id: int | None = None, study_set_id: int | None = None):
-    """熟悉度统计。"""
+    """熟悉度 + 待复习统计。"""
     if course_id is None and study_set_id is None:
         raise HTTPException(status_code=400, detail="需提供 course_id 或 study_set_id")
     service = FlashcardService()
-    return FlashcardStats(**service.stats(course_id, study_set_id))
+    data = service.stats(course_id, study_set_id)
+    data["due"] = service.due_count(course_id, study_set_id)
+    return FlashcardStats(**data)
 
 
 @router.patch("/{flashcard_id}", response_model=FlashcardItem)
@@ -67,6 +94,17 @@ def set_familiarity(flashcard_id: int, payload: FlashcardFamiliarityRequest):
     service = FlashcardService()
     try:
         card = service.set_familiarity(flashcard_id, payload.familiarity)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return _to_item(card)
+
+
+@router.post("/{flashcard_id}/review", response_model=FlashcardItem)
+def review_flashcard(flashcard_id: int, payload: FlashcardReviewRequest):
+    """SM-2 复习：按回忆质量 quality(0-5) 更新调度。"""
+    service = FlashcardService()
+    try:
+        card = service.review(flashcard_id, payload.quality)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return _to_item(card)

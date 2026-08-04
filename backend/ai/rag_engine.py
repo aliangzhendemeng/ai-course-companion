@@ -475,6 +475,15 @@ class RAGEngine:
                 seen.append(sec)
         return seen
 
+    @staticmethod
+    def _cap_consecutive_citations(text: str, max_per: int = 3) -> str:
+        """连续的 [N][N]... 每组最多保留 max_per 个角标（防止 LLM 在一处堆砌）。"""
+        return re.sub(
+            r"(?:\[\d+\])+",
+            lambda m: "".join(re.findall(r"\[\d+\]", m.group(0))[:max_per]),
+            text,
+        )
+
     def _query_with_full_text(self, question: str, full_text: str, course_id: int, history: list[tuple[str, str]] | None = None) -> dict:
         """使用完整课程文本回答，正文论点标注 [N]，编号与来源严格对应。
 
@@ -509,6 +518,8 @@ class RAGEngine:
         system_prompt = (
             "你是一位严谨的课程助教。请严格根据下面提供的课程内容回答用户问题。"
             "每段开头有方括号标注的时间（该段在视频中的起始时间）。"
+            "**凡是陈述课程中的概念、结论、要点、步骤，必须在其后用方括号标注对应时间**（如 [10:39]），"
+            "这是硬性要求——没有时间标注的陈述视为不合格。"
             "如果内容中没有包含问题的答案，请明确告诉用户'根据现有课程内容，无法找到答案'，不要编造。"
         )
         user_prompt = f"""
@@ -520,7 +531,7 @@ class RAGEngine:
 
         要求：
         1. 仅基于以上内容回答。
-        2. 每个论点、结论或要点之后，紧跟支撑它的内容所对应的时间标注，格式与上文一致，例如：……是基本概念[10:39]。
+        2. **每个论点、结论或要点之后，必须紧跟支撑它的内容所对应的时间标注**，格式与上文一致，例如：……是基本概念[10:39]。即使是概述/总结，每个要点也要标注时间。
         3. 每个论点后只标 1~2 个最相关的时间，不要堆砌 3 个以上；全文引用的不同时间点总数尽量控制在 20 个以内，只保留最关键的。
         4. 只引用上文真实出现过的时间，不要编造或修改时间。
         5. 如果内容中没有答案，明确说明无法找到。
@@ -543,22 +554,26 @@ class RAGEngine:
             idx = ts_to_idx.get(sec)
             return f"[{idx}]" if idx is not None else ""
 
-        answer = re.sub(r"\[(\d+):(\d{2})(?::(\d{2}))?\]", _repl, raw_answer)
+        answer = self._cap_consecutive_citations(re.sub(r"\[(\d+):(\d{2})(?::(\d{2}))?\]", _repl, raw_answer))
 
         # 来源：只含被引用的，按编号顺序，时间锚定到最接近的段落起始时间
+        # 仅保留 answer 中实际出现的编号，避免角标被截断后来源多余
+        shown_nums = sorted({int(m) for m in re.findall(r"\[(\d+)\]", answer)})
         kept_ts = [ts for ts, _st, _t in kept]
         seg_by_ts = {ts: (st, text) for ts, st, text in kept}
         sources = []
-        for ts in cited_ts:
-            nearest = min(kept_ts, key=lambda k: abs(k - ts))
-            st, text = seg_by_ts[nearest]
-            sources.append({
-                "type": st,
-                "timestamp": nearest,
-                "text": text[:200],
-                "course_id": course_id,
-                "course_title": title,
-            })
+        for n in shown_nums:
+            if 1 <= n <= len(cited_ts):
+                ts = cited_ts[n - 1]
+                nearest = min(kept_ts, key=lambda k: abs(k - ts))
+                st, text = seg_by_ts[nearest]
+                sources.append({
+                    "type": st,
+                    "timestamp": nearest,
+                    "text": text[:200],
+                    "course_id": course_id,
+                    "course_title": title,
+                })
 
         return {
             "answer": answer,

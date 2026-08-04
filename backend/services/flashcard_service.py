@@ -1,6 +1,7 @@
-"""闪卡业务服务：生成、列表、三档熟悉度标记、统计、清空。"""
+"""闪卡业务服务：生成、列表、三档熟悉度标记、SM-2 间隔重复、统计、清空。"""
 
 import logging
+from datetime import datetime, timedelta, timezone
 
 from sqlmodel import Session, select
 
@@ -127,6 +128,74 @@ class FlashcardService:
         if self._owns_session:
             session.close()
         return card
+
+    # ----- SM-2 间隔重复 -----
+
+    def review(self, flashcard_id: int, quality: int) -> Flashcard:
+        """按回忆质量 quality(0-5) 更新 SM-2 调度字段。
+
+        quality<3 视为答错：重置连续次数、间隔=1天；
+        否则递增连续次数，间隔按 SM-2 公式增长。
+        同时按 quality 同步 familiarity 粗分类。
+        """
+        if not 0 <= quality <= 5:
+            raise ValueError(f"非法 quality: {quality}（应为 0-5）")
+        session = self._get_session()
+        card = session.get(Flashcard, flashcard_id)
+        if not card:
+            if self._owns_session:
+                session.close()
+            raise ValueError(f"闪卡不存在: {flashcard_id}")
+
+        now = datetime.now(timezone.utc)
+        if quality < 3:
+            card.repetitions = 0
+            card.interval_days = 1
+        else:
+            card.repetitions += 1
+            if card.repetitions == 1:
+                card.interval_days = 1
+            elif card.repetitions == 2:
+                card.interval_days = 6
+            else:
+                card.interval_days = max(1, round(card.interval_days * card.ease))
+
+        # 易度因子更新（SM-2 标准），下界 1.3
+        card.ease = max(
+            1.3,
+            card.ease + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)),
+        )
+        card.due_date = now + timedelta(days=card.interval_days)
+        card.last_reviewed_at = now
+        card.familiarity = "unknown" if quality < 3 else ("fuzzy" if quality < 5 else "known")
+        session.add(card)
+        session.commit()
+        session.refresh(card)
+        if self._owns_session:
+            session.close()
+        return card
+
+    def due_queue(
+        self,
+        course_id: int | None = None,
+        study_set_id: int | None = None,
+        limit: int = 50,
+    ) -> list[Flashcard]:
+        """返回已到期（due_date<=now）的闪卡，按到期时间升序。"""
+        now = datetime.now(timezone.utc)
+        statement = self._scope_select(course_id, study_set_id).where(Flashcard.due_date <= now)
+        statement = statement.order_by(Flashcard.due_date, Flashcard.id).limit(limit)
+        session = self._get_session()
+        cards = list(session.exec(statement).all())
+        if self._owns_session:
+            session.close()
+        return cards
+
+    def due_count(
+        self, course_id: int | None = None, study_set_id: int | None = None
+    ) -> int:
+        """已到期待复习的卡数。"""
+        return len(self.due_queue(course_id, study_set_id))
 
     # ----- 统计 -----
 
