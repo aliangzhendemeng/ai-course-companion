@@ -119,6 +119,13 @@ export function CompanionProvider({ children }: { children: ReactNode }) {
     [character, speak],
   )
 
+  // 暴露到 window 供录屏/调试触发学伴反应（情绪动作 + 口头禅气泡 + TTS）
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      ;(window as unknown as { __react?: typeof react }).__react = react
+    }
+  }, [react])
+
   const selectCharacter = useCallback(
     (id: string) => {
       const next = characters.find((c) => c.id === id) ?? null
