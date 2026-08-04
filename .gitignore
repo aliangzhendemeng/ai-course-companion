@@ -24,3 +24,8 @@ build/
 # 学伴角色：配置 + 形象素材都入库（换设备可直接用；仅忽略视频素材）
 assets/characters/**/*.mp4
 assets/characters/**/*.webm
+
+# showcase（Astro 展示站）
+showcase/node_modules/
+showcase/dist/
+showcase/.astro/
