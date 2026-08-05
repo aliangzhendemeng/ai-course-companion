@@ -257,14 +257,36 @@ import Layout from "../layouts/Layout.astro";
       <h3 class="reveal">技术栈</h3>
       <div class="reveal">
       <table>
-        <tr><th>层</th><th>技术</th><th>优点</th><th>局限</th></tr>
-        <tr><td>后端</td><td>FastAPI + SQLModel + SQLite</td><td>模型/校验一体；单文件零运维</td><td>并发写性能一般；不适合多实例部署</td></tr>
-        <tr><td>ASR</td><td>faster-whisper（CPU int8）</td><td>本地免费隐私；反幻觉；繁→简</td><td>CPU 慢，长视频转写耗时</td></tr>
-        <tr><td>OCR/视觉</td><td>PaddleOCR + 视觉 LLM</td><td>OCR 抓文字快；复杂帧才调视觉模型省成本</td><td>视觉模型调用有延迟和费用</td></tr>
-        <tr><td>检索</td><td>Chroma + BM25 + RRF</td><td>语义+关键词双路召回更准</td><td>实现复杂；索引维护成本</td></tr>
-        <tr><td>前端</td><td>Next.js 14 + TanStack Query</td><td>SSR 防闪跳；Query 管服务端状态</td><td>学习曲线；构建配置复杂</td></tr>
-        <tr><td>联网</td><td>Playwright（子进程）</td><td>真实浏览器抗反爬</td><td>资源占用高；速度慢于 API</td></tr>
-        <tr><td>导入</td><td>yt-dlp + httpx</td><td>覆盖平台 URL 和内网直链</td><td>yt-dlp 对国内平台支持不稳定</td></tr>
+        <tr><th>类别</th><th>技术</th><th>说明</th></tr>
+        <tr><td colspan="3" style="background:rgba(91,140,255,.1);font-weight:700;">后端框架</td></tr>
+        <tr><td>Web 框架</td><td>FastAPI + Uvicorn</td><td>自动生成 API 文档；Uvicorn 为 ASGI 服务器</td></tr>
+        <tr><td>数据校验</td><td>Pydantic + SQLModel</td><td>Pydantic 数据校验；SQLModel ORM 模型/校验一体</td></tr>
+        <tr><td>数据库</td><td>SQLite</td><td>单文件零运维，降低部署门槛</td></tr>
+        <tr><td colspan="3" style="background:rgba(91,140,255,.1);font-weight:700;">AI 能力</td></tr>
+        <tr><td>语音识别 ASR</td><td>faster-whisper（CPU int8）</td><td>本地免费隐私；int8 量化提速；VAD 反幻觉</td></tr>
+        <tr><td>文字转换</td><td>OpenCC</td><td>繁体转简体，适配中文课程</td></tr>
+        <tr><td>音频处理</td><td>ffmpeg-python</td><td>视频提取音轨，供 ASR 使用</td></tr>
+        <tr><td>OCR</td><td>PaddleOCR + OpenCV</td><td>PaddleOCR 中文识别准；OpenCV 视频抽帧</td></tr>
+        <tr><td>视觉理解</td><td>视觉 LLM（GPT-4V/DeepSeek-VL 等）</td><td>复杂帧（公式/图表）才调用，省成本</td></tr>
+        <tr><td>语音合成 TTS</td><td>edge-tts</td><td>微软在线 TTS，音色自然，免费额度高</td></tr>
+        <tr><td colspan="3" style="background:rgba(91,140,255,.1);font-weight:700;">RAG 检索</td></tr>
+        <tr><td>框架</td><td>LangChain</td><td>封装检索流程，链式调用</td></tr>
+        <tr><td>向量索引</td><td>Chroma + sentence-transformers</td><td>Chroma 向量数据库；sentence-transformers 生成嵌入</td></tr>
+        <tr><td>关键词检索</td><td>BM25 + jieba</td><td>BM25 抓关键词；jieba 中文分词</td></tr>
+        <tr><td>融合排序</td><td>RRF（Reciprocal Rank Fusion）</td><td>双路召回结果融合，不需调权重</td></tr>
+        <tr><td>LLM 调用</td><td>OpenAI API + httpx + tenacity</td><td>支持多模型配置；httpx 异步 HTTP；tenacity 自动重试</td></tr>
+        <tr><td colspan="3" style="background:rgba(91,140,255,.1);font-weight:700;">前端框架</td></tr>
+        <tr><td>框架</td><td>Next.js 14 + React 18 + TypeScript</td><td>SSR 预取防闪跳；App Router；TypeScript 类型安全</td></tr>
+        <tr><td>状态管理</td><td>TanStack Query</td><td>服务端状态缓存与同步</td></tr>
+        <tr><td>UI 组件</td><td>Radix UI + Tailwind CSS</td><td>Radix 无样式组件可定制；Tailwind 原子化 CSS</td></tr>
+        <tr><td>增强</td><td>Framer Motion + react-markdown + lucide-react</td><td>动画；Markdown 渲染；图标</td></tr>
+        <tr><td colspan="3" style="background:rgba(91,140,255,.1);font-weight:700;">扩展功能</td></tr>
+        <tr><td>联网搜索</td><td>Playwright（子进程）</td><td>真实浏览器抗反爬；子进程避 event loop 冲突</td></tr>
+        <tr><td>视频导入</td><td>yt-dlp + httpx</td><td>yt-dlp 解析平台 URL；httpx 处理内网直链</td></tr>
+        <tr><td colspan="3" style="background:rgba(91,140,255,.1);font-weight:700;">测试</td></tr>
+        <tr><td>测试框架</td><td>pytest + pytest-asyncio</td><td>141 个后端测试，覆盖核心服务层</td></tr>
+        <tr><td colspan="3" style="background:rgba(91,140,255,.1);font-weight:700;">旧版（已归档）</td></tr>
+        <tr><td>前端</td><td>Streamlit + streamlit-player + stqdm</td><td>001 版本快速验证，002 后由 Next.js 替代，保留作故障回退</td></tr>
       </table>
       </div>
     </div>
