@@ -18,7 +18,7 @@ import Layout from "../layouts/Layout.astro";
   <header class="hero" id="hero">
     <div class="container hero-inner">
       <span class="pill">🌐 AI 慕课学伴 · 项目展示</span>
-      <h1>把任意慕课视频<br>变成你的 AI 学伴</h1>
+      <h1>AI 慕课学伴</h1>
       <p class="tagline">上传视频 → 自动转写 / OCR / 总结 → RAG 问答 · 测验闪卡 · 会话制多轮 · 可拖动学伴 · 联网搜索</p>
       <div class="badges">
         <span class="badge">FastAPI + SQLModel</span>
@@ -28,7 +28,7 @@ import Layout from "../layouts/Layout.astro";
         <span class="badge">SM-2 间隔重复</span>
         <span class="badge">Playwright 联网</span>
       </div>
-      <a class="cta" href="#tech">看技术方案 ↓</a>
+      <a class="cta" href="#result">了解更多 ↓</a>
       <div class="stats">
         <div class="stat"><b>6</b><span>版本迭代</span></div>
         <div class="stat"><b>141</b><span>后端测试</span></div>
@@ -42,81 +42,74 @@ import Layout from "../layouts/Layout.astro";
   <section id="result">
     <div class="container">
       <div class="sec-head reveal">
-        <span class="sec-num">01</span>
         <h2>成果展示</h2>
         <p class="lead">六个版本迭代，从基础问答到学伴 + 联网搜索。</p>
       </div>
 
       <div class="timeline reveal">
-        <div class="tl-item"><span class="tl-ver">001 基础</span><span class="tl-desc">：视频上传、ASR 转写、单课程 RAG 问答</span></div>
-        <div class="tl-item"><span class="tl-ver">002 增强</span><span class="tl-desc">：混合检索（向量+BM25+RRF）、跨课程搜索、Next.js 14、流式播放</span></div>
-        <div class="tl-item"><span class="tl-ver">003 体验</span><span class="tl-desc">：单课全文问答、处理状态细化、离线模式</span></div>
-        <div class="tl-item"><span class="tl-ver">004 工程化</span><span class="tl-desc">：学习集、一键启动、设置页、导航职责</span></div>
-        <div class="tl-item"><span class="tl-ver">005 学伴</span><span class="tl-desc">：测验/闪卡/错题本、咕咕嘎嘎学伴、笔记书签、会话制、引用角标、仪表盘/周报</span></div>
-        <div class="tl-item"><span class="tl-ver">006 迭代一</span><span class="tl-desc">：SM-2 间隔重复、视频链接导入、网络查询</span></div>
+        <div class="tl-item"><span class="tl-ver">001 基础</span><span class="tl-desc">视频上传、ASR 转写、单课程 RAG 问答</span></div>
+        <div class="tl-item"><span class="tl-ver">002 增强</span><span class="tl-desc">混合检索（向量+BM25+RRF）、跨课程搜索、Next.js 14、流式播放</span></div>
+        <div class="tl-item"><span class="tl-ver">003 体验</span><span class="tl-desc">单课全文问答、处理状态细化、离线模式</span></div>
+        <div class="tl-item"><span class="tl-ver">004 工程化</span><span class="tl-desc">学习集、一键启动、设置页、导航职责</span></div>
+        <div class="tl-item"><span class="tl-ver">005 学伴</span><span class="tl-desc">测验/闪卡/错题本、咕咕嘎嘎学伴、笔记书签、会话制、引用角标、仪表盘/周报</span></div>
+        <div class="tl-item"><span class="tl-ver">006 迭代一</span><span class="tl-desc">SM-2 间隔重复、视频链接导入、网络查询</span></div>
       </div>
 
-      <h3 class="reveal">功能矩阵</h3>
-      <div class="grid reveal">
-        <div class="card"><span class="tag">RAG</span><h4>混合检索问答</h4><p>向量+BM25+RRF，正文 [N] 与来源严格对应</p></div>
-        <div class="card"><span class="tag">主动学习</span><h4>测验 / 闪卡 / 错题本</h4><p>SM-2 科学复习，错题连续答对掌握</p></div>
-        <div class="card"><span class="tag">会话制</span><h4>多轮对话</h4><p>ChatGPT 式，新建/切换/改名，带历史上下文</p></div>
-        <div class="card"><span class="tag">学伴</span><h4>咕咕嘎嘎</h4><p>可拖动、TTS 语音、情绪动作、答对答错不同反应</p></div>
-        <div class="card"><span class="tag">视频</span><h4>全屏 + 字幕 + 导入</h4><p>WebVTT 字幕、链接导入（yt-dlp / httpx）</p></div>
-        <div class="card"><span class="tag">联网</span><h4>网络查询</h4><p>Playwright 百度，回答附「网络参考」区</p></div>
-      </div>
-
-      <h3 class="reveal">核心功能录屏（点击放大）</h3>
-      <div class="video-grid reveal">
-        <div class="vcard">
+      <h3 class="reveal">核心能力（点击卡片看演示）</h3>
+      <div class="feature-grid reveal">
+        <div class="feature-card" data-video="./videos/companion.mp4">
+          <span class="tag">陪伴</span>
           <h4>🐧 咕咕嘎嘎 · AI 学伴</h4>
-          <p class="vdesc">项目灵魂：可拖动形象、情绪动作、口头禅气泡、edge-tts 语音、答对答错不同反应</p>
-          <video autoplay loop muted playsinline src="/videos/companion.mp4"></video>
+          <p>可拖动形象、情绪动作、口头禅气泡、edge-tts 语音（微软在线 TTS 合成）、答对答错不同反应</p>
+          <span class="play">▶ 观看演示</span>
         </div>
-        <div class="vcard">
+        <div class="feature-card" data-video="./videos/chat.mp4">
+          <span class="tag">RAG</span>
           <h4>💬 智能问答 + 🌐 联网搜索</h4>
-          <p class="vdesc">RAG 引用角标 [N] 严格对应来源；可开🌐联网，回答附网络参考区（百度 Playwright）</p>
-          <video autoplay loop muted playsinline src="/videos/chat.mp4"></video>
+          <p>混合检索（向量+BM25+RRF，即语义+关键词双重匹配），按文件夹/课程划分搜索范围，引用角标 [N] 对应来源；可开联网搜索</p>
+          <span class="play">▶ 观看演示</span>
         </div>
-        <div class="vcard">
-          <h4>📝 测验 · 自动判分</h4>
-          <p class="vdesc">LLM 生成选择/判断题，答对答错学伴不同情绪反应</p>
-          <video autoplay loop muted playsinline src="/videos/quiz.mp4"></video>
+        <div class="feature-card" data-video="./videos/quiz.mp4">
+          <span class="tag">学习</span>
+          <h4>📝 测验 · 错题本</h4>
+          <p>LLM 生成选择/判断题自动判分；历史错题可重做，连续答对 N 次标掌握</p>
+          <span class="play">▶ 观看演示</span>
         </div>
-        <div class="vcard">
+        <div class="feature-card" data-video="./videos/flashcard.mp4">
+          <span class="tag">复习</span>
           <h4>🔄 闪卡 · SM-2 间隔重复</h4>
-          <p class="vdesc">评分（不记得/模糊/记得）→ 科学调度下次复习时间</p>
-          <video autoplay loop muted playsinline src="/videos/flashcard.mp4"></video>
+          <p>评分（不记得/模糊/记得）→ 记忆算法自动调度下次复习时间（记得越牢，间隔越长）</p>
+          <span class="play">▶ 观看演示</span>
         </div>
-        <div class="vcard">
+        <div class="feature-card" data-video="./videos/history.mp4">
+          <span class="tag">对话</span>
           <h4>📜 会话制多轮对话</h4>
-          <p class="vdesc">ChatGPT 式，新建/切换/改名，带历史上下文，按会话分组</p>
-          <video autoplay loop muted playsinline src="/videos/history.mp4"></video>
+          <p>ChatGPT 式，新建/切换/改名，带历史上下文，按会话分组</p>
+          <span class="play">▶ 观看演示</span>
         </div>
-        <div class="vcard">
+        <div class="feature-card" data-video="./videos/video.mp4">
+          <span class="tag">播放</span>
           <h4>🎬 视频 + 字幕 + 全屏</h4>
-          <p class="vdesc">ASR 生成 WebVTT 字幕，custom 渲染避免重复</p>
-          <video autoplay loop muted playsinline src="/videos/video.mp4"></video>
+          <p>ASR 自动生成 .vtt 字幕文件，自定义渲染层避免浏览器重复显示</p>
+          <span class="play">▶ 观看演示</span>
         </div>
-        <div class="vcard">
+        <div class="feature-card" data-video="./videos/upload.mp4">
+          <span class="tag">导入</span>
           <h4>🔗 视频上传 / 链接导入</h4>
-          <p class="vdesc">本地上传或粘 URL（B站/YouTube/内网直链），自动下载处理</p>
-          <video autoplay loop muted playsinline src="/videos/upload.mp4"></video>
+          <p>本地上传或粘贴视频链接，自动下载处理</p>
+          <span class="play">▶ 观看演示</span>
         </div>
-        <div class="vcard">
-          <h4>❌ 错题本 · 连续答对掌握</h4>
-          <p class="vdesc">历史错题、可重做、连续答对 N 次标掌握</p>
-          <video autoplay loop muted playsinline src="/videos/wrongbook.mp4"></video>
-        </div>
-        <div class="vcard">
+        <div class="feature-card" data-video="./videos/courses.mp4">
+          <span class="tag">统计</span>
           <h4>📊 仪表盘 + 周报 + 打卡</h4>
-          <p class="vdesc">掌握度、本周统计、连续学习 streak（零侵入聚合）</p>
-          <video autoplay loop muted playsinline src="/videos/courses.mp4"></video>
+          <p>掌握度、本周统计、自动统计连续学习天数（无需手动打卡，有学习行为即算）</p>
+          <span class="play">▶ 观看演示</span>
         </div>
-        <div class="vcard">
+        <div class="feature-card" data-video="./videos/notes.mp4">
+          <span class="tag">笔记</span>
           <h4>📌 笔记 + 时间戳书签</h4>
-          <p class="vdesc">看视频随手记、一键打书签，点击跳回时间点</p>
-          <video autoplay loop muted playsinline src="/videos/notes.mp4"></video>
+          <p>看视频随手记、一键打书签，点击跳回时间点</p>
+          <span class="play">▶ 观看演示</span>
         </div>
       </div>
     </div>
@@ -126,62 +119,137 @@ import Layout from "../layouts/Layout.astro";
   <section id="tech">
     <div class="container">
       <div class="sec-head reveal">
-        <span class="sec-num">02</span>
         <h2>技术方案</h2>
         <p class="lead">后端 FastAPI + SQLModel + SQLite，前端 Next.js 14。AI 本地（ASR/OCR）+ 云端（LLM）混合。</p>
       </div>
 
-      <h3 class="reveal">整体架构（四层）</h3>
-      <div class="flow reveal">
-        <div class="flow-stage">
-          <div class="flow-row"><div class="flow-node in">前端 · Next.js 14<small>TanStack Query · Tailwind · Web Speech API</small></div></div>
-          <div class="flow-row"><span class="flow-arrow">↕ HTTP / REST</span></div>
-          <div class="flow-row"><div class="flow-node">后端 · FastAPI<small>SQLModel · SQLite · BackgroundTasks · 会话制</small></div></div>
-          <div class="flow-row"><span class="flow-arrow">↕</span></div>
-          <div class="flow-row"><div class="flow-node llm">AI 层<small>faster-whisper ASR · PaddleOCR · LLM(deepseek) · edge-tts · Playwright 联网</small></div></div>
-          <div class="flow-row"><span class="flow-arrow">↕</span></div>
-          <div class="flow-row"><div class="flow-node out">数据 / 索引<small>SQLite · Chroma 向量 · BM25 · yt-dlp/httpx 导入</small></div></div>
+      <h3 class="reveal">整体架构</h3>
+      <div class="arch reveal">
+        <div class="arch-col">
+          <div class="arch-card user">
+            <h5><span class="arch-icon">🖥️</span>用户侧 · 前端</h5>
+            <p>Next.js 14 + TanStack Query + Tailwind<br>视频播放、测验闪卡、笔记书签、学伴互动</p>
+          </div>
+          <div class="arch-card user">
+            <h5><span class="arch-icon">📤</span>输入源</h5>
+            <p>本地上传 · 视频链接导入</p>
+          </div>
+        </div>
+        <div class="arch-mid">
+          <span class="arch-arrow">⇄</span>
+        </div>
+        <div class="arch-col">
+          <div class="arch-card backend">
+            <h5><span class="arch-icon">⚙️</span>服务层 · 后端</h5>
+            <p>FastAPI + SQLModel + SQLite<br>REST API · 后台任务 · 会话管理</p>
+          </div>
+          <div class="arch-card ai">
+            <h5><span class="arch-icon">🧠</span>AI 层</h5>
+            <p>faster-whisper 语音识别 · PaddleOCR 文字识别<br>LLM 总结/问答/出题 · edge-tts 语音合成 · Playwright 联网搜索</p>
+          </div>
+          <div class="arch-card data">
+            <h5><span class="arch-icon">💾</span>数据层</h5>
+            <p>SQLite 存储 · Chroma 向量索引 · BM25 关键词索引</p>
+          </div>
         </div>
       </div>
 
       <h3 class="reveal">数据流</h3>
-      <div class="flow reveal">
-        <div class="flow-stage">
-          <div class="flow-stage-title">阶段一 · <b>视频处理（上传后异步）</b></div>
-          <div class="flow-row">
-            <div class="flow-node in">视频上传</div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-node">ffmpeg<small>提取音频</small></div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-node llm">faster-whisper<small>ASR · 字幕+时间戳</small></div>
-          </div>
-          <div class="flow-row">
-            <span class="flow-branch">同视频 →</span>
-            <div class="flow-node">cv2 抽帧</div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-node">PaddleOCR<small>文字</small></div>
-            <span class="flow-arrow">+</span>
-            <div class="flow-node llm">视觉模型<small>复杂帧（公式/图表）</small></div>
-          </div>
-          <div class="flow-row">
-            <span class="flow-branch">汇总 →</span>
-            <div class="flow-node llm">LLM<small>总结/大纲/讲义/测验/闪卡/章节</small></div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-node out">Chroma 向量 + BM25 索引</div>
+      <div class="flow-cols reveal">
+        <div class="flow-card">
+          <div class="flow-card-title">📤 阶段一 · 视频上传处理</div>
+          <div class="flow-steps">
+            <div class="flow-step">
+              <div class="flow-step-num">1</div>
+              <div class="flow-step-body">
+                <div class="flow-step-name">视频上传 / 链接导入</div>
+                <div class="flow-step-desc">本地上传或粘贴视频链接，自动下载处理</div>
+              </div>
+            </div>
+            <div class="flow-step-arrow">↓</div>
+            <div class="flow-step">
+              <div class="flow-step-num">2</div>
+              <div class="flow-step-body">
+                <div class="flow-step-name">ffmpeg 提取音频</div>
+                <div class="flow-step-desc">从视频中分离音轨，供语音识别使用</div>
+              </div>
+            </div>
+            <div class="flow-step-arrow">↓</div>
+            <div class="flow-step">
+              <div class="flow-step-num">3</div>
+              <div class="flow-step-body">
+                <div class="flow-step-name">faster-whisper ASR</div>
+                <div class="flow-step-desc">本地语音识别，生成带时间戳的字幕文本</div>
+              </div>
+            </div>
+            <div class="flow-step-arrow">↓</div>
+            <div class="flow-step">
+              <div class="flow-step-num">4</div>
+              <div class="flow-step-body">
+                <div class="flow-step-name">OCR + 视觉分析</div>
+                <div class="flow-step-desc">PaddleOCR 抓画面文字，复杂帧调视觉模型</div>
+              </div>
+            </div>
+            <div class="flow-step-arrow">↓</div>
+            <div class="flow-step">
+              <div class="flow-step-num">5</div>
+              <div class="flow-step-body">
+                <div class="flow-step-name">LLM 生成学习材料</div>
+                <div class="flow-step-desc">总结、大纲、讲义、测验题、闪卡、章节划分</div>
+              </div>
+            </div>
+            <div class="flow-step-arrow">↓</div>
+            <div class="flow-step">
+              <div class="flow-step-num">6</div>
+              <div class="flow-step-body">
+                <div class="flow-step-name">建立索引</div>
+                <div class="flow-step-desc">Chroma 向量索引 + BM25 关键词索引</div>
+              </div>
+            </div>
           </div>
         </div>
-        <div class="flow-stage">
-          <div class="flow-stage-title">阶段二 · <b>问答（实时）</b></div>
-          <div class="flow-row">
-            <div class="flow-node in">用户提问</div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-node">混合检索<small>向量+BM25+RRF</small></div>
-            <span class="flow-arrow">+</span>
-            <div class="flow-node">会话历史<small>最近 6 条</small></div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-node llm">LLM 回答<small>引用映射 [N]</small></div>
-            <span class="flow-arrow">→</span>
-            <div class="flow-node out">回答 + 来源</div>
+        <div class="flow-card">
+          <div class="flow-card-title">💬 阶段二 · 实时问答</div>
+          <div class="flow-steps">
+            <div class="flow-step">
+              <div class="flow-step-num">1</div>
+              <div class="flow-step-body">
+                <div class="flow-step-name">用户提问</div>
+                <div class="flow-step-desc">支持选择单课程 / 多文件夹 / 全库范围</div>
+              </div>
+            </div>
+            <div class="flow-step-arrow">↓</div>
+            <div class="flow-step">
+              <div class="flow-step-num">2</div>
+              <div class="flow-step-body">
+                <div class="flow-step-name">混合检索</div>
+                <div class="flow-step-desc">向量语义 + BM25 关键词双路召回，RRF 融合排序</div>
+              </div>
+            </div>
+            <div class="flow-step-arrow">↓</div>
+            <div class="flow-step">
+              <div class="flow-step-num">3</div>
+              <div class="flow-step-body">
+                <div class="flow-step-name">加载会话历史</div>
+                <div class="flow-step-desc">带入最近 6 条对话，支持多轮上下文</div>
+              </div>
+            </div>
+            <div class="flow-step-arrow">↓</div>
+            <div class="flow-step">
+              <div class="flow-step-num">4</div>
+              <div class="flow-step-body">
+                <div class="flow-step-name">LLM 生成回答</div>
+                <div class="flow-step-desc">引用映射 [N] 确保来源可追溯</div>
+              </div>
+            </div>
+            <div class="flow-step-arrow">↓</div>
+            <div class="flow-step">
+              <div class="flow-step-num">5</div>
+              <div class="flow-step-body">
+                <div class="flow-step-name">返回答案 + 来源</div>
+                <div class="flow-step-desc">答案、引用角标、原文片段、时间戳跳转</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -189,24 +257,16 @@ import Layout from "../layouts/Layout.astro";
       <h3 class="reveal">技术栈</h3>
       <div class="reveal">
       <table>
-        <tr><th>层</th><th>技术</th><th>为什么</th></tr>
-        <tr><td>后端</td><td>FastAPI + SQLModel + SQLite</td><td>模型/校验一体；SQLite 单文件零运维</td></tr>
-        <tr><td>ASR</td><td>faster-whisper（CPU int8）</td><td>本地免费隐私；反幻觉（VAD+禁上文传递）；OpenCC 繁→简</td></tr>
-        <tr><td>OCR/视觉</td><td>PaddleOCR + 视觉 LLM</td><td>OCR 抓文字，复杂帧才调视觉模型省成本</td></tr>
-        <tr><td>检索</td><td>Chroma + BM25 + RRF</td><td>向量抓语义、BM25 抓关键词，RRF 融合</td></tr>
-        <tr><td>前端</td><td>Next.js 14 + TanStack Query</td><td>SSR 预取防闪跳、Query 管服务端状态</td></tr>
-        <tr><td>联网</td><td>Playwright（子进程）</td><td>真实浏览器抗反爬；子进程避 event loop 冲突</td></tr>
-        <tr><td>导入</td><td>yt-dlp + httpx</td><td>平台 URL 走 yt-dlp，内网直链走 httpx（SSL 宽容）</td></tr>
+        <tr><th>层</th><th>技术</th><th>优点</th><th>局限</th></tr>
+        <tr><td>后端</td><td>FastAPI + SQLModel + SQLite</td><td>模型/校验一体；单文件零运维</td><td>并发写性能一般；不适合多实例部署</td></tr>
+        <tr><td>ASR</td><td>faster-whisper（CPU int8）</td><td>本地免费隐私；反幻觉；繁→简</td><td>CPU 慢，长视频转写耗时</td></tr>
+        <tr><td>OCR/视觉</td><td>PaddleOCR + 视觉 LLM</td><td>OCR 抓文字快；复杂帧才调视觉模型省成本</td><td>视觉模型调用有延迟和费用</td></tr>
+        <tr><td>检索</td><td>Chroma + BM25 + RRF</td><td>语义+关键词双路召回更准</td><td>实现复杂；索引维护成本</td></tr>
+        <tr><td>前端</td><td>Next.js 14 + TanStack Query</td><td>SSR 防闪跳；Query 管服务端状态</td><td>学习曲线；构建配置复杂</td></tr>
+        <tr><td>联网</td><td>Playwright（子进程）</td><td>真实浏览器抗反爬</td><td>资源占用高；速度慢于 API</td></tr>
+        <tr><td>导入</td><td>yt-dlp + httpx</td><td>覆盖平台 URL 和内网直链</td><td>yt-dlp 对国内平台支持不稳定</td></tr>
       </table>
       </div>
-
-      <h3 class="reveal">关键模块</h3>
-      <ul class="reveal">
-        <li><strong>引用角标后端映射</strong>：LLM 标 [MM:SS] → 后端映射稳定 [N] → 来源第 N 条 = 正文 [N]，连续角标 ≤3</li>
-        <li><strong>SM-2 间隔重复</strong>：ease/interval/due_date，review(quality) 算法 + due_queue 待复习</li>
-        <li><strong>会话制</strong>：Conversation 表 + 历史上下文，RAG query* 加 history；旧消息自动迁移</li>
-        <li><strong>断点续传</strong>：重新处理复用 ASR 字幕，跳过最慢的转写</li>
-      </ul>
     </div>
   </section>
 
@@ -214,17 +274,34 @@ import Layout from "../layouts/Layout.astro";
   <section id="ai">
     <div class="container">
       <div class="sec-head reveal">
-        <span class="sec-num">03</span>
         <h2>AI 开发方法</h2>
         <p class="lead">speckit 流程 + Claude Code 人机协作，AI 写代码、人审决策，全程可追溯。</p>
       </div>
+      <h3 class="reveal">角色分工</h3>
       <div class="grid reveal">
-        <div class="card"><span class="tag">流程</span><h4>speckit</h4><p>spec → plan → tasks → 实现，文档入仓，决策有据</p></div>
-        <div class="card"><span class="tag">协作</span><h4>人定方向 / AI 实现</h4><p>范围/选型/视觉人决策，AI 写细节</p></div>
-        <div class="card"><span class="tag">质量</span><h4>小步 + 审核</h4><p>模块测试 + 端到端 + 真截图，不自动提交</p></div>
+        <div class="card">
+          <span class="tag">人负责</span>
+          <h4>决策与验收</h4>
+          <p>定需求范围、选技术方案、审代码、跑真机测试、手动提交</p>
+        </div>
+        <div class="card">
+          <span class="tag">AI 负责</span>
+          <h4>执行与细节</h4>
+          <p>写 spec/plan/tasks、编码实现、补测试、修 bug、写文档</p>
+        </div>
+        <div class="card">
+          <span class="tag">共同</span>
+          <h4>迭代优化</h4>
+          <p>人提反馈 → AI 改代码 → 人再验证，循环直到满意</p>
+        </div>
       </div>
-      <div class="why reveal">
-        <b>核心教训</b>：AI 改代码要小心 Edit 范围、迁移加列要给默认值、不能只靠类型检查要真跑截图。这些都是真实踩坑后总结的（见下）。
+
+      <h3 class="reveal">关键原则</h3>
+      <div class="reveal">
+        <div class="why"><b>小步提交</b>：每个 task 完成后立即测试，不攒大改动</div>
+        <div class="why"><b>机器验证</b>：模块测试 + 联调测试 + 完整测试，自动化保障质量</div>
+        <div class="why"><b>人工审核</b>：AI 写的代码不盲目信任，要看实现效果、跑真机验证</div>
+        <div class="why"><b>文档入仓</b>：spec/plan/tasks 全部进 git，决策可追溯</div>
       </div>
     </div>
   </section>
@@ -233,7 +310,6 @@ import Layout from "../layouts/Layout.astro";
   <section id="why">
     <div class="container">
       <div class="sec-head reveal">
-        <span class="sec-num">04</span>
         <h2>设计决策：为什么这么做</h2>
         <p class="lead">每个选型都有 why，不是随便选的。</p>
       </div>
@@ -244,7 +320,7 @@ import Layout from "../layouts/Layout.astro";
         <div class="why"><b>Playwright 子进程</b>，不用 sync 直调：sync 在 FastAPI 线程池卡死（event loop 冲突），子进程独立。</div>
         <div class="why"><b>字幕 custom 渲染</b>，不用原生 default：浏览器 controls+track 渲染两次，改 JS 自画一层。</div>
         <div class="why"><b>断点续传</b>，不重新清所有：ASR 最慢，失败重试复用已生成字幕。</div>
-        <div class="why"><b>视频导入双路</b>：平台走 yt-dlp，内网直链走 httpx（SSL 宽容）。</div>
+        <div class="why"><b>视频导入双路</b>：平台走 yt-dlp，内网直链走 httpx。</div>
       </div>
     </div>
   </section>
@@ -253,7 +329,6 @@ import Layout from "../layouts/Layout.astro";
   <section id="pitfalls">
     <div class="container">
       <div class="sec-head reveal">
-        <span class="sec-num">05</span>
         <h2>踩坑与解决</h2>
         <p class="lead">全是真实发生的（git 历史可查）。</p>
       </div>
@@ -282,6 +357,18 @@ import Layout from "../layouts/Layout.astro";
         <div class="pitfall"><div class="pf-title">切错题本做题记录丢</div>
           <div class="pf-root">根因：onSuccess 只刷新错题本，没刷新题目进度。</div>
           <div class="pf-fix">修复：刷新 quizKey（前缀匹配题目+错题本）。</div></div>
+        <div class="pitfall"><div class="pf-title">错题"已掌握"反复横跳</div>
+          <div class="pf-root">根因：答对一次就标掌握，答错又回未掌握，状态不稳定。</div>
+          <div class="pf-fix">修复：连续答对 2 次才标掌握，消除抖动。</div></div>
+        <div class="pitfall"><div class="pf-title">切 Tab 作答进度丢失</div>
+          <div class="pf-root">根因：前端本地状态未同步到服务端，切 Tab 重置。</div>
+          <div class="pf-fix">修复：作答进度实时保存服务端，切 Tab 恢复。</div></div>
+        <div class="pitfall"><div class="pf-title">课程列表 SSR 闪跳</div>
+          <div class="pf-root">根因：服务端渲染数据与客户端 hydration 不一致。</div>
+          <div class="pf-fix">修复：SSR 预取 + TanStack Query 客户端缓存同步。</div></div>
+        <div class="pitfall"><div class="pf-title">HuggingFace 模型下载失败</div>
+          <div class="pf-root">根因：国内网络访问 HF 超时，模型下载卡住。</div>
+          <div class="pf-fix">修复：启用离线模式，提前下载好模型打包。</div></div>
       </div>
     </div>
   </section>
@@ -290,7 +377,6 @@ import Layout from "../layouts/Layout.astro";
   <section id="future">
     <div class="container">
       <div class="sec-head reveal">
-        <span class="sec-num">06</span>
         <h2>后续规划</h2>
         <p class="lead">006 之后的方向。</p>
       </div>
@@ -320,18 +406,17 @@ import Layout from "../layouts/Layout.astro";
     </div>
   </div>
   <script>
-    // 点击功能卡片 → 放大整张卡片（标题+说明+视频）
+    // 点击功能卡片 → 播放对应录屏
     const modal = document.getElementById('video-modal');
     const modalVideo = document.getElementById('modal-video');
     const modalClose = document.getElementById('modal-close');
     const modalTitle = document.getElementById('modal-title');
     const modalDesc = document.getElementById('modal-desc');
-    document.querySelectorAll('.vcard').forEach(card => {
+    document.querySelectorAll('.feature-card').forEach(card => {
       card.addEventListener('click', () => {
-        const v = card.querySelector('video');
         modalTitle.textContent = card.querySelector('h4').textContent;
-        modalDesc.textContent = card.querySelector('.vdesc').textContent;
-        modalVideo.src = v.currentSrc || v.src;
+        modalDesc.textContent = card.querySelector('p').textContent;
+        modalVideo.src = card.getAttribute('data-video');
         modal.classList.add('open');
         modalVideo.play();
       });
