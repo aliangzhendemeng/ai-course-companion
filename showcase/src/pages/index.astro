@@ -5,6 +5,7 @@ import Layout from "../layouts/Layout.astro";
   <nav class="nav">
     <div class="container">
       <a href="#hero">概览</a>
+      <a href="#motivation">背景</a>
       <a href="#result">成果</a>
       <a href="#tech">技术方案</a>
       <a href="#ai">AI 方法</a>
@@ -37,6 +38,57 @@ import Layout from "../layouts/Layout.astro";
       </div>
     </div>
   </header>
+
+  <!-- 背景与动机 -->
+  <section id="motivation">
+    <div class="container">
+      <div class="sec-head reveal">
+        <h2>背景与动机</h2>
+        <p class="lead">为什么做这个 —— 从传统慕课学习的三个痛点出发。</p>
+      </div>
+      <div class="grid reveal">
+        <div class="card">
+          <h4>📺 被动观看</h4>
+          <p>视频只能从头看到尾，遇到不懂的地方无法即时提问，卡点就搁置。</p>
+        </div>
+        <div class="card">
+          <h4>🧠 看完就忘</h4>
+          <p>缺乏主动回顾手段，没有测验、没有复习节奏，知识留存率低。</p>
+        </div>
+        <div class="card">
+          <h4>☁️ 隐私顾虑</h4>
+          <p>课程视频上传到云端工具有泄露风险，校内 / 付费课程尤其敏感。</p>
+        </div>
+      </div>
+      <div class="why reveal">
+        <b>目标：</b>把任意慕课视频变成可提问、可测验、可复习的 AI 学伴 —— 本地处理保隐私，问答带时间戳可跳转，主动学习形成闭环。
+      </div>
+
+      <h3 class="reveal">与同类方案对比</h3>
+      <p class="lead reveal" style="margin-bottom:8px;">为什么不用现成工具 —— 三点差异化是设计时的核心考量。</p>
+      <table class="reveal">
+        <tr><th>方案</th><th>局限</th><th>本项目的差异</th></tr>
+        <tr>
+          <td><strong>ChatGPT / 文心一言</strong><br>（上传课件）</td>
+          <td>材料需上传云端，隐私有风险；无视频时间戳概念，回答无法跳回原片</td>
+          <td>本地处理 + 问答带 [MM:SS] 时间戳，可溯源</td>
+        </tr>
+        <tr>
+          <td><strong>视频平台自带 AI</strong><br>（B站 AI 总结等）</td>
+          <td>只有单向摘要，不能自由提问；无个性化复习</td>
+          <td>RAG 任意提问 + 测验/闪卡主动学习</td>
+        </tr>
+        <tr>
+          <td><strong>笔记软件 AI</strong><br>（Notion AI / Obsidian）</td>
+          <td>不面向视频，需手动整理文本；无自动转写与记忆调度</td>
+          <td>视频原生 + ASR/OCR 自动化 + SM-2 间隔重复</td>
+        </tr>
+      </table>
+      <div class="why reveal">
+        <b>核心差异：</b>本地隐私、视频原生（时间戳/关键帧）、主动学习闭环 —— 三者叠加是现成工具都不同时具备的。
+      </div>
+    </div>
+  </section>
 
   <!-- 成果展示 -->
   <section id="result">
@@ -337,9 +389,9 @@ import Layout from "../layouts/Layout.astro";
       </div>
       <div class="reveal">
         <div class="why"><b>faster-whisper 本地 ASR</b>，不用云端 API：免费、隐私、可调反幻觉；代价 CPU 慢 → 断点续传缓解。</div>
-        <div class="why"><b>混合检索</b>，不用纯向量：向量漏关键词，BM25 补，RRF 融合更准。</div>
-        <div class="why"><b>引用后端映射</b>，不让 LLM 直接标 [N]：LLM 标编号会错位，后端从 [MM:SS] 映射保证一致。</div>
-        <div class="why"><b>Playwright 子进程</b>，不用 sync 直调：sync 在 FastAPI 线程池卡死（event loop 冲突），子进程独立。</div>
+        <div class="why"><b>混合检索</b>，不用纯向量：向量漏关键词，BM25 补，RRF 免调参融合，召回更全更准。</div>
+        <div class="why"><b>引用后端映射</b>，不让 LLM 直接标 [N]：LLM 标编号会错位，后端从 [MM:SS] 映射为稳定角标并截断堆砌，来源可核查、防编造。</div>
+        <div class="why"><b>Playwright 子进程</b>，不用 sync 直调：真实浏览器渲染抗反爬；sync 在 FastAPI 线程池卡死（event loop 冲突），子进程独立避开。</div>
         <div class="why"><b>字幕 custom 渲染</b>，不用原生 default：浏览器 controls+track 渲染两次，改 JS 自画一层。</div>
         <div class="why"><b>断点续传</b>，不重新清所有：ASR 最慢，失败重试复用已生成字幕。</div>
         <div class="why"><b>视频导入双路</b>：平台走 yt-dlp，内网直链走 httpx。</div>
